@@ -4,12 +4,14 @@ type Props = {
   hud: Hud
   message: string
   paused: boolean
+  /** Phone vs frozen gyro zero — Level · hold when wings-level. */
+  levelCue?: string | null
 }
 
 /** Show FL chip when AGL ≈ ≥1000 ft (~305 m). */
 const FL_SHOW_M = 305
 
-export function HUD({ hud, message, paused }: Props) {
+export function HUD({ hud, message, paused, levelCue }: Props) {
   const modeClass =
     hud.mode === 'HEL' || hud.mode === 'VL'
       ? 'mode-hel'
@@ -18,6 +20,7 @@ export function HUD({ hud, message, paused }: Props) {
         : 'mode-apl'
 
   const showFl = hud.alt >= FL_SHOW_M
+  const levelOk = levelCue === 'Level · hold'
 
   return (
     <div className="hud">
@@ -59,6 +62,11 @@ export function HUD({ hud, message, paused }: Props) {
         <div className={`hud-chip mode-chip ${modeClass}`}>
           <span className="v">{hud.mode}</span>
         </div>
+        {levelCue && (
+          <div className={`hud-chip hud-level ${levelOk ? 'level-ok' : 'level-off'}`}>
+            <span className="v">{levelCue}</span>
+          </div>
+        )}
       </div>
       {(message || paused) && <div className="hud-msg">{paused ? 'PAUSED' : message}</div>}
       <div className="hud-cam">

@@ -323,12 +323,12 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
 
   if (mode === 'STOVL') {
     if (speedKt > 180) envelopeWarn = 'FAST for STOVL — slow or go CTOL'
-    else if (speedKt < 40 && agl < 6 && !c.onGround) envelopeWarn = 'STOVL — watch sink'
+    else if (speedKt < 25 && agl < 6 && !c.onGround) envelopeWarn = 'STOVL — watch sink'
     else envelopeWarn = 'STOVL — thrust vector blend'
   } else if (mode === 'VL') {
-    if (speedKt > 50) envelopeWarn = 'VL — reduce forward speed'
+    if (speedKt > 55) envelopeWarn = 'VL — reduce forward speed'
     else if (experience !== 'casual') envelopeWarn = 'VL — lift fan + nozzle'
-  } else if (mode === 'CTOL' && speedKt < 80 && agl > 5 && ctrl.tcl < 0.5) {
+  } else if (mode === 'CTOL' && speedKt < 75 && agl > 5 && ctrl.tcl < 0.45) {
     envelopeWarn = 'CTOL — keep speed / AoA'
   }
 
@@ -371,12 +371,15 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const ny = (1 - nozzleDown) * fyB + nozzleDown * uy
   const nz = (1 - nozzleDown) * fzB + nozzleDown * uz
 
-  const mainThrust = F35_MAX_THRUST * ctrl.tcl * powerAvail * (0.75 + 0.25 * c.rotorRpm)
+  // v3: slight VL/STOVL thrust boost so conversion needs less forward speed
+  const stovlBoost = 1 + vlFrac * 0.18
+  const mainThrust =
+    F35_MAX_THRUST * ctrl.tcl * powerAvail * (0.75 + 0.25 * c.rotorRpm) * stovlBoost
 
-  // Lift fan (cue) — strong in VL/STOVL, along body-up
-  const fanFrac = clamp((vlFrac - 0.2) / 0.8, 0, 1)
-  const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanFrac * powerAvail * (0.6 + 0.4 * c.rotorRpm)
-  const ge = 0.14 * Math.exp(-agl / 8) * fanFrac * (c.onGround ? 0.3 : 1)
+  // Lift fan — engages earlier / stronger in STOVL→VL (v3)
+  const fanFrac = clamp((vlFrac - 0.12) / 0.72, 0, 1)
+  const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanFrac * powerAvail * (0.65 + 0.35 * c.rotorRpm)
+  const ge = 0.18 * Math.exp(-agl / 8) * fanFrac * (c.onGround ? 0.3 : 1)
 
   let fx = nx * mainThrust + ux * fanThrust * (1 + ge)
   let fy = ny * mainThrust + uy * fanThrust * (1 + ge) - F35_MASS * GRAVITY
@@ -390,7 +393,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
 
   const airspeed = Math.hypot(c.vx, c.vy, c.vz)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
-  const wingOn = clamp(1 - vlFrac * 0.85, 0.15, 1) * clamp(airspeed / 28, 0, 1)
+  const wingOn = clamp(1 - vlFrac * 0.8, 0.18, 1) * clamp(airspeed / 22, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 3) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))

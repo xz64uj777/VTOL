@@ -19,7 +19,7 @@ export const GYRO_LIVE_MS = 1000
 export const TILT_NO_SIGNAL_HINT =
   "Phone isn't sending motion — Chrome + HTTPS + screen unlocked."
 
-const PREFS_KEY = 'osprey-flight-prefs-v2'
+const PREFS_KEY = 'osprey-flight-prefs-v3'
 
 export type FlightPrefs = {
   sens: SensKey
@@ -28,14 +28,16 @@ export type FlightPrefs = {
    * Realistic: heli stick-up → nose DOWN.
    */
   pitchMode: PitchMode
-  /** Extra invert on top of pitchMode (phone toggle). */
   invertPitch: boolean
   invertRoll: boolean
   /** Phone tilt/gyro drives cyclic when true (hides on-screen cyclic stick). */
   tiltCyclic: boolean
   gyroZeroBeta: number
   gyroZeroGamma: number
-  /** True only after sustained live (≥3 orientation events / 500ms) + calibrate. */
+  /**
+   * True when calibrated AND gyro sustained-live (applying tilt).
+   * Zeros freeze after Cal — losing live clears ready but does NOT rewrite zeros.
+   */
   gyroReady: boolean
   showHelp: boolean
   tipSeen: boolean

@@ -67,6 +67,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const fallbackTriedRef = useRef(false)
   const tiltOnAtRef = useRef(0)
   const noSignalStickyRef = useRef(false)
+  const calFrozenRef = useRef(false)
 
   const [hud, setHud] = useState(() => hudFrom(simRef.current))
   const [message, setMessage] = useState('')
@@ -77,6 +78,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const [calStatus, setCalStatus] = useState<string | null>(null)
   const [tiltHb, setTiltHb] = useState<TiltHeartbeat>(prefs.tiltCyclic ? 'pending' : 'off')
   const [tiltSticky, setTiltSticky] = useState<string | null>(null)
+  const [levelCue, setLevelCue] = useState<string | null>(null)
   const pausedRef = useRef(false)
   const menuOpenRef = useRef(false)
   const showSettingsRef = useRef(false)
@@ -121,11 +123,11 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     inputRef.current.touchNacelle = null
     inputRef.current.touchVector = null
     const stored = loadPrefs()
-    prefsRef.current = {
-      ...stored,
-      experience,
-    }
+    prefsRef.current = { ...stored, experience }
     setPrefs(prefsRef.current)
+    if (prefsRef.current.tiltCyclic && prefsRef.current.gyroReady) {
+      calFrozenRef.current = true
+    }
 
     const unbind = bindKeyboard(inputRef.current)
     const gyro = bindGyro(inputRef.current)
@@ -140,17 +142,17 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      const sim = simRef.current
-      sim.paused = pausedRef.current
+      const simNow = simRef.current
+      simNow.paused = pausedRef.current
       const controls = sampleControls(
         inputRef.current,
-        sim.controls,
+        simNow.controls,
         dt,
         prefsRef.current,
-        sim.bird,
+        simNow.bird,
       )
-      stepSim(sim, controls, dt)
-      audioRef.current.update(sim.craft.rotorRpm, sim.controls.tcl, sim.craft.nacelleDeg)
+      stepSim(simNow, controls, dt)
+      audioRef.current.update(simNow.craft.rotorRpm, simNow.controls.tcl, simNow.craft.nacelleDeg)
 
       const canvas = canvasRef.current
       if (canvas) {
@@ -164,15 +166,15 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             canvas.height = Math.floor(h * dpr)
           }
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-          rendererRef.current.draw(ctx, sim, w, h, dt)
+          rendererRef.current.draw(ctx, simNow, w, h, dt)
         }
       }
 
       hudAcc += dt
       if (hudAcc > 0.1) {
         hudAcc = 0
-        setHud(hudFrom(sim))
-        setMessage(sim.message)
+        setHud(hudFrom(simNow))
+        setMessage(simNow.message)
       }
       raf = requestAnimationFrame(loop)
     }
@@ -189,8 +191,13 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         }
         setPaused((p) => !p)
       }
-      if (e.code === 'KeyH') setMenuOpen((m) => !m)
-      if (e.code === 'Comma' && e.shiftKey) setShowSettings((s) => !s)
+      if (e.code === 'KeyH') {
+        setMenuOpen((m) => {
+          const next = !m
+          if (next) setPaused(true)
+          return next
+        })
+      }
     }
     window.addEventListener('keydown', onKey)
 
@@ -202,11 +209,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       window.removeEventListener('keydown', onKey)
       audioRef.current.stop()
     }
-    // Restart only when bird/experience/quality change (new sortie)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [experience, bird, quality])
 
-  // Tilt heartbeat
   useEffect(() => {
     if (!prefs.tiltCyclic) {
       setTiltHb('off')
@@ -214,6 +219,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       fallbackTriedRef.current = false
       noSignalStickyRef.current = false
       setTiltSticky(null)
+      setLevelCue(null)
       return
     }
 
@@ -221,6 +227,23 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       const input = inputRef.current
       const now = performance.now()
       const sustained = gyroIsSustained(input, now)
+      const prefsNow = prefsRef.current
+
+      if (calFrozenRef.current || prefsNow.gyroReady) {
+        const dBeta = input.gyroBeta - prefsNow.gyroZeroBeta
+        const dGamma = input.gyroGamma - prefsNow.gyroZeroGamma
+        const level = Math.abs(dBeta) < 3.5 && Math.abs(dGamma) < 3.5
+        if (level) {
+          setLevelCue('Level · hold')
+        } else {
+          const bits: string[] = []
+          if (Math.abs(dBeta) >= 3.5) bits.push(dBeta > 0 ? 'nose↑' : 'nose↓')
+          if (Math.abs(dGamma) >= 3.5) bits.push(dGamma > 0 ? 'R bank' : 'L bank')
+          setLevelCue(bits.join(' · ') || 'tilt')
+        }
+      } else {
+        setLevelCue(null)
+      }
 
       if (sustained) {
         noSignalStickyRef.current = false
@@ -228,6 +251,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         setTiltHb('live')
         if (pendingCalRef.current) {
           pendingCalRef.current = false
+          calFrozenRef.current = true
           patchPrefs({
             gyroReady: true,
             gyroZeroBeta: input.gyroBeta,
@@ -235,17 +259,23 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           })
           setCalStatus('Calibrated')
           window.setTimeout(() => setCalStatus(null), 1400)
+        } else if (calFrozenRef.current && !prefsNow.gyroReady) {
+          patchPrefs({ gyroReady: true })
         }
         return
       }
 
-      if (prefsRef.current.gyroReady) {
+      if (prefsNow.gyroReady) {
         patchPrefs({ gyroReady: false })
       }
 
       const waited = now - tiltOnAtRef.current
       const anyRecent = gyroIsLive(input, now, GYRO_LIVE_MS)
-      if (noSignalStickyRef.current || (waited >= GYRO_LIVE_MS && !anyRecent)) {
+      if (
+        calFrozenRef.current ||
+        noSignalStickyRef.current ||
+        (waited >= GYRO_LIVE_MS && !anyRecent)
+      ) {
         noSignalStickyRef.current = true
         setTiltHb('no-signal')
         setTiltSticky(TILT_NO_SIGNAL_HINT)
@@ -294,16 +324,19 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       pendingCalRef.current = false
       fallbackTriedRef.current = false
       noSignalStickyRef.current = false
+      calFrozenRef.current = false
       patchPrefs({ tiltCyclic: false, gyroReady: false })
       setTiltHb('off')
       setCalStatus(null)
       setTiltSticky(null)
+      setLevelCue(null)
       return
     }
     resetGyroTracking(inputRef.current)
     fallbackTriedRef.current = false
     pendingCalRef.current = true
     noSignalStickyRef.current = false
+    calFrozenRef.current = false
     tiltOnAtRef.current = performance.now()
     patchPrefs({ tiltCyclic: true, gyroReady: false })
     setTiltHb('pending')
@@ -340,6 +373,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       }
       const inp = inputRef.current
       pendingCalRef.current = false
+      calFrozenRef.current = true
       patchPrefs({
         gyroReady: true,
         gyroZeroBeta: inp.gyroBeta,
@@ -356,16 +390,29 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   return (
     <div className="flight">
       <canvas ref={canvasRef} className="flight-canvas" />
-      <HUD hud={hud} message={bannerMsg} paused={paused} />
+      <HUD hud={hud} message={bannerMsg} paused={paused} levelCue={levelCue} />
 
       <div className="flight-top">
-        <button type="button" className="deck-btn" onClick={() => setMenuOpen(true)}>
+        <button
+          type="button"
+          className="deck-btn"
+          onClick={() => {
+            setMenuOpen(true)
+            setPaused(true)
+          }}
+        >
           Menu
         </button>
         <button
           type="button"
           className={`deck-btn ${showSettings ? 'active' : ''}`}
-          onClick={() => setShowSettings((s) => !s)}
+          onClick={() => {
+            setShowSettings((s) => {
+              const next = !s
+              if (next) setPaused(true)
+              return next
+            })
+          }}
         >
           Settings
         </button>
@@ -455,8 +502,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             </div>
           )}
           <p className="settings-hint">
-            Recalibrate when <strong>Tilt · live</strong>. Tilt ON hides the left cyclic stick — gyro
-            drives cyclic. Yaw bar stays on the left; TCL/THR + NAC/VEC on the right.
+            Recalibrate only when <strong>Tilt · live</strong> and the phone is wings-level (Level
+            cue). Zero freezes after Cal — no mid-flight auto-recal. Closing Settings does not
+            resume — tap Resume. Tilt ON hides the left CYC stick.
           </p>
           {tiltSticky && <p className="settings-hint tilt-sticky-hint">{tiltSticky}</p>}
           <button type="button" className="settings-close" onClick={() => setShowSettings(false)}>

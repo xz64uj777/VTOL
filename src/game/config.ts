@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v2 — tunables. */
+/** Osprey / F-35 Flight v3 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -35,10 +35,10 @@ export const CONV_MIN_SPEED = 35
 export const CONV_MAX_SPEED = 140
 export const CONV_MIN_ALT = 8
 
-/** —— F-35 (phone-simple) —— */
+/** —— F-35 (phone-simple) — v3: stronger VL/STOVL thrust, less fwd speed needed —— */
 export const F35_MASS = 13000
-export const F35_MAX_THRUST = F35_MASS * GRAVITY * 1.35
-export const F35_LIFT_FAN = F35_MASS * GRAVITY * 0.95
+export const F35_MAX_THRUST = F35_MASS * GRAVITY * 1.58
+export const F35_LIFT_FAN = F35_MASS * GRAVITY * 1.22
 export const F35_GEAR_H = 1.8
 export const F35_WING = 42
 export const F35_CL = 4.2
@@ -47,7 +47,8 @@ export const F35_VECTOR_SLEW = 0.55
 /** vectorPos thresholds: VL ≥0.75, STOVL ≥0.35, else CTOL */
 export const F35_VL_MIN = 0.75
 export const F35_STOVL_MIN = 0.35
-export const F35_HOVER_THR = 0.78
+/** Hover TCL band — lower = hover feels stronger at typical stick */
+export const F35_HOVER_THR = 0.66
 export const F35_PITCH_RATE = 0.95
 export const F35_ROLL_RATE = 1.35
 export const F35_YAW_RATE = 0.7

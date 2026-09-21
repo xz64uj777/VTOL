@@ -1,38 +1,35 @@
-# Fly sheet — Osprey Flight v2
+# Fly sheet — Osprey Flight v3
 
-Five minutes. Phone or tablet, landscape. Pass/fail by **feel**, not numbers.
+Five minutes. Phone or tablet, landscape. Pass/fail by **feel**.
 
-## What’s new (this drop)
+## What’s new (v3)
 
-- Yaw is a **bar on the left** (L ← → R)
-- Power + nacelle/vector **on the right**
-- **Tilt** hides the joystick; **Cal** and **Settings** stay on screen in flight
-- Stick-up = **nose up** (Casual). Invert pitch / invert roll in Settings if you want it the other way
-- **ALT** is the big number; **FL** only shows when you’re high
-- More trees so height and speed read
+- **Settings** or **Menu** pauses the bird. Close does **not** unpause — tap **Resume**
+- Tilt **Cal** freezes. Climb / nacelle rotate must **not** silently re-zero
+- HUD **Level · hold** when the phone matches that frozen zero (or nose/bank hints)
+- Lose gyro → sticky **no signal**; same zero when it comes back
+- **F-35** hover / STOVL has more punch; convert needs less forward speed
+
+v2 deck still locked: yaw bar left, tilt hides stick, Casual nose-up, ALT/FL, trees.
 
 ## Good feels like
 
-1. Hangar: pick **Osprey**, **Intermediate**, **Fly**.
-2. Raise **TCL** (right slider). You lift. Hover without fighting the stick.
-3. Yaw bar left: slide **L** = nose left, **R** = nose right. It springs back.
-4. Climb a bit. Slide **NAC** down. Bird leans into airplane. Trees start to streak.
-5. **Settings** → Invert pitch ON/OFF — nose follows the label.
-6. **Tilt ON** — left **CYC** stick **disappears**. Hold still → **Cal**. Tilt the tablet: nose follows.
-7. Land: NAC back up, ease TCL onto the pad. Firm is ok; smash is a fail.
-8. Optional: Hangar → **F-35**. Same deck. **VEC** up = hover, down = jet.
+1. Osprey → Fly. Raise **TCL**. Hover.
+2. Open **Settings** mid-hover. World **freezes**. Close. Still frozen until **Resume**.
+3. Same with **Menu**. Esc closes the sheet; still paused.
+4. **Tilt ON** → hold still → **Cal**. HUD says **Level · hold** when you’re level.
+5. Climb and start **NAC** down around a few hundred feet. Tilt must **not** jump / re-zero.
+6. Cover the phone / lock screen briefly: **no signal**. Unlock: same Cal, not a new one.
+7. Hangar → **F-35**. Raise **THR**. Hover should feel stronger than v2. Slide **VEC** down — it should keep flying without needing a huge run.
 
 ## Shout if (fail)
 
-- Cyclic stick still showing with Tilt on
-- No Cal / Settings after takeoff
-- Casual stick-up points the nose at the dirt
-- Yaw is a round stick, or it’s on the right
-- You cannot tell altitude / the world is a flat green blob
-- Tilt does nothing after you allowed motion and calibrated
+- Settings open and the bird **keeps flying**
+- Close Settings and it **auto-resumes**
+- Tilt jumps / re-zeros around 400 ft or when nacelles start moving
+- No **Level** cue after Cal
+- Gyro drop silently rewrites Cal
+- F-35 VL feels weak / falls out converting unless you’re already fast
+- v2 regressions: cyclic stick with Tilt on, no Cal in flight, yaw is a round stick, Casual stick-up = nose down
 
-Desktop/laptop: Tilt will say **no signal** (no gyro). That’s expected. Phone is the real test.
-
-## Not this drop
-
-No missions, scores, or extra systems. If flight feels honest, say so — then we talk next.
+Laptop tilt = **no signal** is expected. Phone is the real test.
