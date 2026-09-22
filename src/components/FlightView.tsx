@@ -5,7 +5,6 @@ import {
   bindGyro,
   bindKeyboard,
   createInput,
-  gyroIsLive,
   gyroIsSustained,
   requestGyroPermission,
   resetGyroTracking,
@@ -14,6 +13,7 @@ import {
 } from '../game/input'
 import {
   defaultPrefs,
+  GYRO_HOLDOVER_MS,
   GYRO_LIVE_MS,
   loadPrefs,
   savePrefs,
@@ -33,7 +33,7 @@ import {
   stepSim,
 } from '../game/sim'
 import type { BirdKind, Experience, SystemsPanel } from '../game/types'
-import { HUD } from './HUD'
+import { HUD, type LevelReading } from './HUD'
 import { SystemsMenu } from './SystemsMenu'
 import { VirtualControls } from './VirtualControls'
 
@@ -67,7 +67,8 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const fallbackTriedRef = useRef(false)
   const tiltOnAtRef = useRef(0)
   const noSignalStickyRef = useRef(false)
-  const calFrozenRef = useRef(false)
+  const gyroEverLiveRef = useRef(false)
+  const reconnectNeedsSlewRef = useRef(false)
 
   const [hud, setHud] = useState(() => hudFrom(simRef.current))
   const [message, setMessage] = useState('')
@@ -76,9 +77,16 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [prefs, setPrefs] = useState<FlightPrefs>(() => bootPrefs(experience))
   const [calStatus, setCalStatus] = useState<string | null>(null)
-  const [tiltHb, setTiltHb] = useState<TiltHeartbeat>(prefs.tiltCyclic ? 'pending' : 'off')
+  const [tiltHb, setTiltHb] = useState<TiltHeartbeat>('off')
   const [tiltSticky, setTiltSticky] = useState<string | null>(null)
-  const [levelCue, setLevelCue] = useState<string | null>(null)
+  const [levelReading, setLevelReading] = useState<LevelReading>({
+    pitchDeg: 0,
+    bankDeg: 0,
+    level: true,
+    source: 'craft',
+  })
+  /** Once Cal succeeds, zeros stay frozen until explicit Recalibrate. */
+  const calFrozenRef = useRef(false)
   const pausedRef = useRef(false)
   const menuOpenRef = useRef(false)
   const showSettingsRef = useRef(false)
@@ -104,6 +112,10 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     showSettingsRef.current = showSettings
   }, [showSettings])
   useEffect(() => {
+    // Settings and Systems stay mounted over flight, so silence a dedicated master bus immediately.
+    audioRef.current.mute(paused || menuOpen || showSettings)
+  }, [paused, menuOpen, showSettings])
+  useEffect(() => {
     prefsRef.current = prefs
   }, [prefs])
 
@@ -122,8 +134,19 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     inputRef.current.touchTcl = null
     inputRef.current.touchNacelle = null
     inputRef.current.touchVector = null
-    const stored = loadPrefs()
-    prefsRef.current = { ...stored, experience }
+    const base = { ...defaultPrefs(), experience, tipSeen: false }
+    // Keep tilt/sens across sortie restart if already set
+    prefsRef.current = {
+      ...base,
+      sens: prefsRef.current.sens,
+      pitchMode: prefsRef.current.pitchMode,
+      invertPitch: prefsRef.current.invertPitch,
+      invertRoll: prefsRef.current.invertRoll,
+      tiltCyclic: prefsRef.current.tiltCyclic,
+      gyroZeroBeta: prefsRef.current.gyroZeroBeta,
+      gyroZeroGamma: prefsRef.current.gyroZeroGamma,
+      gyroReady: prefsRef.current.gyroReady,
+    }
     setPrefs(prefsRef.current)
     if (prefsRef.current.tiltCyclic && prefsRef.current.gyroReady) {
       calFrozenRef.current = true
@@ -142,21 +165,21 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      const simNow = simRef.current
-      simNow.paused = pausedRef.current
+      const sim = simRef.current
+      sim.paused = pausedRef.current
       const controls = sampleControls(
         inputRef.current,
-        simNow.controls,
-        dt,
+        sim.controls,
+        sim.paused ? 0 : dt,
         prefsRef.current,
-        simNow.bird,
+        sim.bird,
       )
-      stepSim(simNow, controls, dt)
+      stepSim(sim, controls, dt)
       audioRef.current.update(
-        simNow.craft.rotorRpm,
-        simNow.controls.tcl,
-        simNow.bird === 'f35' ? simNow.craft.vectorPos : simNow.craft.nacelleDeg,
-        simNow.bird,
+        sim.craft.rotorRpm,
+        sim.controls.tcl,
+        sim.bird === 'f35' ? sim.craft.vectorPos : sim.craft.nacelleDeg,
+        sim.bird,
       )
 
       const canvas = canvasRef.current
@@ -171,15 +194,30 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             canvas.height = Math.floor(h * dpr)
           }
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-          rendererRef.current.draw(ctx, simNow, w, h, dt)
+          rendererRef.current.draw(ctx, sim, w, h, dt)
         }
       }
 
       hudAcc += dt
       if (hudAcc > 0.1) {
         hudAcc = 0
-        setHud(hudFrom(simNow))
-        setMessage(simNow.message)
+        setHud(hudFrom(sim))
+        setMessage(sim.message)
+        const p = prefsRef.current
+        const inp = inputRef.current
+        const gyroLevel = p.tiltCyclic && p.gyroReady && inp.gyroActive
+        const pitchDeg = gyroLevel
+          ? inp.gyroBeta - p.gyroZeroBeta
+          : (sim.craft.pitch * 180) / Math.PI
+        const bankDeg = gyroLevel
+          ? inp.gyroGamma - p.gyroZeroGamma
+          : (sim.craft.roll * 180) / Math.PI
+        setLevelReading({
+          pitchDeg,
+          bankDeg,
+          level: Math.abs(pitchDeg) < 3.5 && Math.abs(bankDeg) < 3.5,
+          source: gyroLevel ? 'tilt' : 'craft',
+        })
       }
       raf = requestAnimationFrame(loop)
     }
@@ -189,6 +227,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       if (e.code === 'KeyC') cycleCamera(simRef.current)
       if (e.code === 'KeyP' || e.code === 'Escape') {
         if (e.code === 'Escape' && (menuOpenRef.current || showSettingsRef.current)) {
+          // Close sheets only — stay paused until explicit Resume
           setMenuOpen(false)
           setShowSettings(false)
           simRef.current.systemsPanel = 'none'
@@ -199,6 +238,13 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       if (e.code === 'KeyH') {
         setMenuOpen((m) => {
           const next = !m
+          if (next) setPaused(true)
+          return next
+        })
+      }
+      if (e.code === 'Comma' && e.shiftKey) {
+        setShowSettings((s) => {
+          const next = !s
           if (next) setPaused(true)
           return next
         })
@@ -214,49 +260,42 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       window.removeEventListener('keydown', onKey)
       audioRef.current.stop()
     }
+    // Restart only when bird/experience/quality change (new sortie)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [experience, bird, quality])
 
+  // Sticky tilt heartbeat: keep the last good sample through short Android event gaps.
   useEffect(() => {
     if (!prefs.tiltCyclic) {
       setTiltHb('off')
       pendingCalRef.current = false
       fallbackTriedRef.current = false
       noSignalStickyRef.current = false
+      gyroEverLiveRef.current = false
+      reconnectNeedsSlewRef.current = false
       setTiltSticky(null)
-      setLevelCue(null)
       return
     }
 
-    const tickHb = () => {
+    const tick = () => {
       const input = inputRef.current
       const now = performance.now()
       const sustained = gyroIsSustained(input, now)
       const prefsNow = prefsRef.current
-
-      if (calFrozenRef.current || prefsNow.gyroReady) {
-        const dBeta = input.gyroBeta - prefsNow.gyroZeroBeta
-        const dGamma = input.gyroGamma - prefsNow.gyroZeroGamma
-        const level = Math.abs(dBeta) < 3.5 && Math.abs(dGamma) < 3.5
-        if (level) {
-          setLevelCue('Level · hold')
-        } else {
-          const bits: string[] = []
-          if (Math.abs(dBeta) >= 3.5) bits.push(dBeta > 0 ? 'nose↑' : 'nose↓')
-          if (Math.abs(dGamma) >= 3.5) bits.push(dGamma > 0 ? 'R bank' : 'L bank')
-          setLevelCue(bits.join(' · ') || 'tilt')
-        }
-      } else {
-        setLevelCue(null)
-      }
+      const age = input.gyroLastMs > 0 ? now - input.gyroLastMs : Number.POSITIVE_INFINITY
+      const waited = now - tiltOnAtRef.current
 
       if (sustained) {
+        gyroEverLiveRef.current = true
         noSignalStickyRef.current = false
         setTiltSticky(null)
         setTiltHb('live')
         if (pendingCalRef.current) {
+          // Explicit Cal / first arm only: write the zero once, then freeze it.
           pendingCalRef.current = false
           calFrozenRef.current = true
+          reconnectNeedsSlewRef.current = false
+          input.gyroBlend = 1
           patchPrefs({
             gyroReady: true,
             gyroZeroBeta: input.gyroBeta,
@@ -265,45 +304,64 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           setCalStatus('Calibrated')
           window.setTimeout(() => setCalStatus(null), 1400)
         } else if (calFrozenRef.current && !prefsNow.gyroReady) {
+          // Real timeout recovered: retain frozen zeros and ease current pose in over 320 ms.
+          input.gyroBlend = reconnectNeedsSlewRef.current ? 0 : 1
+          reconnectNeedsSlewRef.current = false
           patchPrefs({ gyroReady: true })
         }
         return
       }
 
-      if (prefsNow.gyroReady) {
-        patchPrefs({ gyroReady: false })
+      const lockedBefore = gyroEverLiveRef.current || calFrozenRef.current
+      const inHoldover = lockedBefore && !reconnectNeedsSlewRef.current && age < GYRO_HOLDOVER_MS
+      if (inHoldover) {
+        // Stay live: keep applying last good β/γ and keep gyroReady through holdover.
+        // Do NOT clear gyroReady on brief gaps (convert load often throttles orientation).
+        setTiltHb('live')
+        setTiltSticky(null)
+        if (calFrozenRef.current && !prefsNow.gyroReady) {
+          patchPrefs({ gyroReady: true })
+        }
+        // Re-arm absolute+relative listeners if silence >1s (phone may have dropped stream).
+        if (age >= GYRO_LIVE_MS) {
+          gyroRef.current?.tryAbsoluteFallback()
+        }
+        return
       }
 
-      const waited = now - tiltOnAtRef.current
-      const anyRecent = gyroIsLive(input, now, GYRO_LIVE_MS)
-      if (
-        calFrozenRef.current ||
-        noSignalStickyRef.current ||
-        (waited >= GYRO_LIVE_MS && !anyRecent)
-      ) {
+      // Only a true ~5 s silence can remove authority after calibration.
+      const trueSilence = lockedBefore
+        ? age >= GYRO_HOLDOVER_MS
+        : waited >= GYRO_HOLDOVER_MS && age >= GYRO_HOLDOVER_MS
+      if (trueSilence || reconnectNeedsSlewRef.current) {
+        if (prefsNow.gyroReady) {
+          reconnectNeedsSlewRef.current = true
+          patchPrefs({ gyroReady: false })
+        }
         noSignalStickyRef.current = true
         setTiltHb('no-signal')
         setTiltSticky(TILT_NO_SIGNAL_HINT)
         setCalStatus(null)
-        if (!fallbackTriedRef.current) {
-          fallbackTriedRef.current = true
-          gyroRef.current?.tryAbsoluteFallback()
-        }
+        // Keep trying to re-arm so convert-load recovery can resume without toggling Tilt.
+        gyroRef.current?.tryAbsoluteFallback()
       } else {
         setTiltHb('pending')
-        if (!fallbackTriedRef.current && waited >= GYRO_LIVE_MS) {
-          fallbackTriedRef.current = true
-          gyroRef.current?.tryAbsoluteFallback()
-        }
+      }
+
+      // Initial arm path: try re-bind once after first live wait.
+      if (!fallbackTriedRef.current && waited >= GYRO_LIVE_MS) {
+        fallbackTriedRef.current = true
+        gyroRef.current?.tryAbsoluteFallback()
       }
     }
 
-    tickHb()
-    const id = window.setInterval(tickHb, 200)
+    tick()
+    const id = window.setInterval(tick, 200)
     return () => window.clearInterval(id)
   }, [prefs.tiltCyclic, patchPrefs])
 
   const goHangar = () => {
+    audioRef.current.mute(true)
     resetToHangar(simRef.current)
     onHangar()
   }
@@ -329,19 +387,21 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       pendingCalRef.current = false
       fallbackTriedRef.current = false
       noSignalStickyRef.current = false
+      gyroEverLiveRef.current = false
+      reconnectNeedsSlewRef.current = false
       calFrozenRef.current = false
       patchPrefs({ tiltCyclic: false, gyroReady: false })
       setTiltHb('off')
       setCalStatus(null)
       setTiltSticky(null)
-      setLevelCue(null)
       return
     }
     resetGyroTracking(inputRef.current)
     fallbackTriedRef.current = false
     pendingCalRef.current = true
     noSignalStickyRef.current = false
-    calFrozenRef.current = false
+    gyroEverLiveRef.current = false
+    reconnectNeedsSlewRef.current = false
     tiltOnAtRef.current = performance.now()
     patchPrefs({ tiltCyclic: true, gyroReady: false })
     setTiltHb('pending')
@@ -379,6 +439,8 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       const inp = inputRef.current
       pendingCalRef.current = false
       calFrozenRef.current = true
+      inp.gyroBlend = 1
+      reconnectNeedsSlewRef.current = false
       patchPrefs({
         gyroReady: true,
         gyroZeroBeta: inp.gyroBeta,
@@ -395,7 +457,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   return (
     <div className="flight">
       <canvas ref={canvasRef} className="flight-canvas" />
-      <HUD hud={hud} message={bannerMsg} paused={paused} levelCue={levelCue} />
+      <HUD hud={hud} message={bannerMsg} paused={paused} level={levelReading} />
 
       <div className="flight-top">
         <button
@@ -414,7 +476,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           onClick={() => {
             setShowSettings((s) => {
               const next = !s
-              if (next) setPaused(true)
+              if (next) setPaused(true) // opening pauses; closing does not resume
               return next
             })
           }}
@@ -424,7 +486,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         <button
           type="button"
           className={`deck-btn ${prefs.tiltCyclic ? 'active' : ''}`}
-          onClick={() => void toggleTilt()}
+          onClick={toggleTilt}
           title="Phone tilt → cyclic"
         >
           {tiltLabel(tiltHb, prefs.tiltCyclic)}
@@ -493,7 +555,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             <button
               type="button"
               className={prefs.tiltCyclic ? 'active' : ''}
-              onClick={() => void toggleTilt()}
+              onClick={toggleTilt}
             >
               {tiltLabel(tiltHb, prefs.tiltCyclic)}
             </button>
@@ -507,9 +569,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             </div>
           )}
           <p className="settings-hint">
-            Recalibrate only when <strong>Tilt · live</strong> and the phone is wings-level (Level
-            cue). Zero freezes after Cal — no mid-flight auto-recal. Closing Settings does not
-            resume — tap Resume. Tilt ON hides the left CYC stick.
+            Recalibrate only when <strong>Tilt · live</strong> and phone is wings-level (see Level cue).
+            Zero freezes after Cal — no mid-flight auto-recal. Closing Settings does not resume —
+            tap Resume. Tilt ON hides left CYC stick. Laptops have no gyro — use a phone for Tilt.
           </p>
           {tiltSticky && <p className="settings-hint tilt-sticky-hint">{tiltSticky}</p>}
           <button type="button" className="settings-close" onClick={() => setShowSettings(false)}>
@@ -555,7 +617,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         bump={bump}
         prefs={prefs}
         tiltHb={tiltHb}
-        onTilt={() => void toggleTilt()}
+        onTilt={toggleTilt}
         onRecalibrate={recalibrate}
         onSens={cycleSens}
         onPitchMode={togglePitchMode}

@@ -24,6 +24,8 @@ export type InputState = {
   gyroLastMs: number
   /** Recent orientation event timestamps (pruned to sustain window). */
   gyroEvents: number[]
+  /** 0..1 reconnect ramp; prevents a resumed phone pose from spiking cyclic. */
+  gyroBlend: number
 }
 
 export function createInput(): InputState {
@@ -41,6 +43,7 @@ export function createInput(): InputState {
     gyroActive: false,
     gyroLastMs: 0,
     gyroEvents: [],
+    gyroBlend: 1,
   }
 }
 
@@ -81,11 +84,13 @@ export function sampleControls(
 
   // Optional phone tilt → cyclic (additive with stick, then clamp)
   if (prefs.tiltCyclic && input.gyroActive && prefs.gyroReady) {
+    // Ramp only after a true signal timeout; a brief gap keeps the last good sample at full authority.
+    input.gyroBlend = Math.min(1, input.gyroBlend + dt / 0.32)
     const maxTilt = 28
     const dBeta = input.gyroBeta - prefs.gyroZeroBeta
     const dGamma = input.gyroGamma - prefs.gyroZeroGamma
-    let gyPitch = clamp(dBeta / maxTilt, -1, 1) * sens
-    let gyRoll = clamp(dGamma / maxTilt, -1, 1) * sens
+    let gyPitch = clamp(dBeta / maxTilt, -1, 1) * sens * input.gyroBlend
+    let gyRoll = clamp(dGamma / maxTilt, -1, 1) * sens * input.gyroBlend
     gyPitch = applyDeadzone(gyPitch, 0.06)
     gyRoll = applyDeadzone(gyRoll, 0.06)
     stickPitch += gyPitch
@@ -231,15 +236,20 @@ export function bindGyro(input: InputState): GyroBind {
     applyOrient(input, ev.beta, ev.gamma)
   }
 
-  window.addEventListener('deviceorientation', onOrient)
-
-  let absoluteOn = false
-  const tryAbsoluteFallback = () => {
-    if (absoluteOn) return
-    absoluteOn = true
-    window.addEventListener('deviceorientationabsolute', onAbsolute)
+  const attach = () => {
+    // Re-arm without permanently removing: remove+add refreshes the OS subscription
+    // when phones throttle orientation under convert load.
     window.removeEventListener('deviceorientation', onOrient)
+    window.removeEventListener('deviceorientationabsolute', onAbsolute)
     window.addEventListener('deviceorientation', onOrient)
+    window.addEventListener('deviceorientationabsolute', onAbsolute)
+  }
+
+  attach()
+
+  // Re-add both listeners (used when silence >1s during holdover).
+  const tryAbsoluteFallback = () => {
+    attach()
   }
 
   return {
@@ -275,4 +285,5 @@ export function resetGyroTracking(input: InputState): void {
   input.gyroActive = false
   input.gyroLastMs = 0
   input.gyroEvents.length = 0
+  input.gyroBlend = 1
 }

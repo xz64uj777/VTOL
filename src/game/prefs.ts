@@ -12,14 +12,17 @@ export const SENS_SCALE: Record<SensKey, number> = {
 
 export const STICK_DEADZONE = 0.08
 
-/** Max age (ms) for a deviceorientation event to count as live. */
+/** Initial live wait before showing a pending signal warning. */
 export const GYRO_LIVE_MS = 1000
+
+/** Keep calibrated tilt live through Android orientation-event gaps. */
+export const GYRO_HOLDOVER_MS = 5000
 
 /** Sticky copy when Tilt is on but motion never sustains. */
 export const TILT_NO_SIGNAL_HINT =
-  "Phone isn't sending motion — Chrome + HTTPS + screen unlocked."
+  "Phone isn't sending motion — Chrome + HTTPS + screen unlocked. Laptops have no gyro; use a phone."
 
-const PREFS_KEY = 'osprey-flight-prefs-v3'
+const PREFS_KEY = 'osprey-flight-prefs-v5'
 
 export type FlightPrefs = {
   sens: SensKey
@@ -35,8 +38,8 @@ export type FlightPrefs = {
   gyroZeroBeta: number
   gyroZeroGamma: number
   /**
-   * True when calibrated AND gyro sustained-live (applying tilt).
-   * Zeros freeze after Cal — losing live clears ready but does NOT rewrite zeros.
+   * True while calibrated tilt is applying, including the 5 s signal holdover.
+   * Zeros freeze after Cal — only a true timeout clears ready; reconnect never rewrites them.
    */
   gyroReady: boolean
   showHelp: boolean

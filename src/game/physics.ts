@@ -263,19 +263,19 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   let fy = ty * thrustMag - MASS * GRAVITY
   let fz = tz * thrustMag
 
-  const airspeed = Math.hypot(c.vx, c.vy, c.vz)
+  const airspeed = Math.min(Math.hypot(c.vx, c.vy, c.vz), 140)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
   // Wing comes online earlier so convert has a lift path
   const wingOn = clamp(aplFrac * 1.25, 0, 1) * clamp(airspeed / 16, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 2) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
-    const aoa = c.pitch - vPitch
+    const aoa = clamp(c.pitch - vPitch, -1.2, 1.2)
     c.aoa = aoa
     const cl = clamp(CL0 + CL_ALPHA * aoa + FLAP_CL * c.flaps, -1.2, 1.85)
     const cd = CD0 + CD_INDUCED * cl * cl + FLAP_CD * c.flaps
-    const lift = qDyn * WING_AREA * cl * wingOn
-    const drag = qDyn * WING_AREA * cd * wingOn * 0.85
+    const lift = clamp(qDyn * WING_AREA * cl * wingOn, -MASS * 40, MASS * 40)
+    const drag = clamp(qDyn * WING_AREA * cd * wingOn * 0.85, 0, MASS * 30)
     fx += ux * lift
     fy += uy * lift
     fz += uz * lift
@@ -319,12 +319,23 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
     fz -= c.vz * 0.1 * MASS
   }
 
-  c.vx += (fx / MASS) * dt
-  c.vy += (fy / MASS) * dt
-  c.vz += (fz / MASS) * dt
+  // Cap accelerations so extreme AoA / q cannot explode into NaN next frame
+  const ax = clamp(fx / MASS, -80, 80)
+  const ay = clamp(fy / MASS, -60, 40)
+  const az = clamp(fz / MASS, -80, 80)
+  c.vx += ax * dt
+  c.vy += ay * dt
+  c.vz += az * dt
+  c.vx = clamp(c.vx, -120, 120)
+  c.vy = clamp(c.vy, -40, 40)
+  c.vz = clamp(c.vz, -120, 120)
   c.x += c.vx * dt
   c.y += c.vy * dt
   c.z += c.vz * dt
+  if (!Number.isFinite(c.x)) c.x = 0
+  if (!Number.isFinite(c.y)) c.y = GEAR_H
+  if (!Number.isFinite(c.z)) c.z = 0
+  if (!Number.isFinite(c.aoa)) c.aoa = c.pitch
 
   const contactH = c.gearDown ? GEAR_H : GEAR_H * 0.55
   const plantThr = mode === 'HEL' ? 0.55 : 0.25
@@ -449,18 +460,18 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     fx += ux * ctrl.tcl * F35_MASS * 2.5 * stovlBlend * 0.15
   }
 
-  const airspeed = Math.hypot(c.vx, c.vy, c.vz)
+  const airspeed = Math.min(Math.hypot(c.vx, c.vy, c.vz), 180)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
   const wingOn = clamp(1 - vlFrac * 0.65, 0.22, 1) * clamp(airspeed / 16, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 3) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
-    const aoa = c.pitch - vPitch
+    const aoa = clamp(c.pitch - vPitch, -1.2, 1.2)
     c.aoa = aoa
     const cl = clamp(F35_CL0 + F35_CL * aoa + FLAP_CL * c.flaps * 0.8, -1.1, 1.7)
     const cd = F35_CD0 + 0.055 * cl * cl + FLAP_CD * c.flaps * 0.65
-    const lift = qDyn * F35_WING * cl * wingOn
-    const drag = qDyn * F35_WING * cd * wingOn * 0.85
+    const lift = clamp(qDyn * F35_WING * cl * wingOn, -F35_MASS * 45, F35_MASS * 45)
+    const drag = clamp(qDyn * F35_WING * cd * wingOn * 0.85, 0, F35_MASS * 35)
     fx += ux * lift
     fy += uy * lift
     fz += uz * lift
@@ -498,12 +509,22 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     fz -= c.vz * 0.1 * F35_MASS
   }
 
-  c.vx += (fx / F35_MASS) * dt
-  c.vy += (fy / F35_MASS) * dt
-  c.vz += (fz / F35_MASS) * dt
+  const ax = clamp(fx / F35_MASS, -100, 100)
+  const ay = clamp(fy / F35_MASS, -70, 50)
+  const az = clamp(fz / F35_MASS, -100, 100)
+  c.vx += ax * dt
+  c.vy += ay * dt
+  c.vz += az * dt
+  c.vx = clamp(c.vx, -160, 160)
+  c.vy = clamp(c.vy, -45, 45)
+  c.vz = clamp(c.vz, -160, 160)
   c.x += c.vx * dt
   c.y += c.vy * dt
   c.z += c.vz * dt
+  if (!Number.isFinite(c.x)) c.x = 0
+  if (!Number.isFinite(c.y)) c.y = F35_GEAR_H
+  if (!Number.isFinite(c.z)) c.z = 0
+  if (!Number.isFinite(c.aoa)) c.aoa = c.pitch
 
   const contactH = c.gearDown ? F35_GEAR_H : F35_GEAR_H * 0.5
   const plantThr = mode === 'VL' ? 0.55 : mode === 'STOVL' ? 0.38 : 0.22
@@ -536,6 +557,42 @@ export function hardLanding(c: Craft): boolean {
       ? GEAR_H
       : GEAR_H * 0.55
   return c.y <= contactH + 0.08 && (c.vy < -8 || Math.hypot(c.vx, c.vz) > 22)
+}
+
+
+/** Freeze craft if any kinematic field is non-finite. Returns true if a fault was caught. */
+export function sanitizeCraft(c: Craft): boolean {
+  const fields = [c.x, c.y, c.z, c.vx, c.vy, c.vz, c.pitch, c.roll, c.yaw, c.aoa, c.nacelleDeg, c.vectorPos, c.rotorRpm]
+  if (fields.every((v) => Number.isFinite(v))) {
+    // Soft clamp attitudes even when finite
+    c.pitch = clamp(c.pitch, -1.2, 1.2)
+    c.roll = clamp(c.roll, -1.4, 1.4)
+    c.yaw = wrapAngle(c.yaw)
+    c.nacelleDeg = clamp(c.nacelleDeg, 0, 90)
+    c.vectorPos = clamp(c.vectorPos, 0, 1)
+    c.rotorRpm = clamp(c.rotorRpm, 0, 1.5)
+    c.aoa = clamp(c.aoa, -1.5, 1.5)
+    const gearH = c.kind === 'f35' ? F35_GEAR_H : GEAR_H
+    if (c.y < gearH * 0.4) c.y = gearH * 0.4
+    if (c.y > 8000) c.y = 8000
+    return false
+  }
+  const gearH = c.kind === 'f35' ? F35_GEAR_H : GEAR_H
+  c.vx = 0
+  c.vy = 0
+  c.vz = 0
+  c.x = Number.isFinite(c.x) ? c.x : 0
+  c.y = Number.isFinite(c.y) ? clamp(c.y, gearH, 500) : gearH
+  c.z = Number.isFinite(c.z) ? c.z : 0
+  c.pitch = Number.isFinite(c.pitch) ? clamp(c.pitch, -0.5, 0.5) : 0
+  c.roll = Number.isFinite(c.roll) ? clamp(c.roll, -0.5, 0.5) : 0
+  c.yaw = Number.isFinite(c.yaw) ? wrapAngle(c.yaw) : 0
+  c.aoa = 0
+  c.rotorRpm = clamp(Number.isFinite(c.rotorRpm) ? c.rotorRpm : 0.2, 0, 1)
+  c.nacelleDeg = clamp(Number.isFinite(c.nacelleDeg) ? c.nacelleDeg : (c.kind === 'osprey' ? 90 : 0), 0, 90)
+  c.vectorPos = clamp(Number.isFinite(c.vectorPos) ? c.vectorPos : (c.kind === 'f35' ? 0.85 : 0), 0, 1)
+  c.onGround = c.y <= gearH + 0.2
+  return true
 }
 
 export function headingDeg(yaw: number): number {
