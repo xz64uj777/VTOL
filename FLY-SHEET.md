@@ -1,35 +1,31 @@
-# Fly sheet — Osprey Flight v3
+# Fly sheet — Osprey Flight v4
 
-Five minutes. Phone or tablet, landscape. Pass/fail by **feel**.
+Phone/tablet, landscape. Pass/fail by **feel**. This drop is the convert / pitch fix.
 
-## What’s new (v3)
+## What’s new
 
-- **Settings** or **Menu** pauses the bird. Close does **not** unpause — tap **Resume**
-- Tilt **Cal** freezes. Climb / nacelle rotate must **not** silently re-zero
-- HUD **Level · hold** when the phone matches that frozen zero (or nose/bank hints)
-- Lose gyro → sticky **no signal**; same zero when it comes back
-- **F-35** hover / STOVL has more punch; convert needs less forward speed
+- Convert **does not fall out**. Pitch **works** while nacelles / VEC rotate
+- Power + rotate + convert = short takeoff, not a rock
+- Osprey rumble ≠ F-35 jet (eyes-closed)
 
-v2 deck still locked: yaw bar left, tilt hides stick, Casual nose-up, ALT/FL, trees.
+v3 still true: Settings pauses; Close does not Resume; Cal frozen; Level · hold.
 
 ## Good feels like
 
-1. Osprey → Fly. Raise **TCL**. Hover.
-2. Open **Settings** mid-hover. World **freezes**. Close. Still frozen until **Resume**.
-3. Same with **Menu**. Esc closes the sheet; still paused.
-4. **Tilt ON** → hold still → **Cal**. HUD says **Level · hold** when you’re level.
-5. Climb and start **NAC** down around a few hundred feet. Tilt must **not** jump / re-zero.
-6. Cover the phone / lock screen briefly: **no signal**. Unlock: same Cal, not a new one.
-7. Hangar → **F-35**. Raise **THR**. Hover should feel stronger than v2. Slide **VEC** down — it should keep flying without needing a huge run.
+1. Osprey → Fly. Raise **TCL**. Climb a bit.
+2. Slide **NAC** down **and** pitch forward (~80 mph if you can). Nose follows the stick. Speed holds or builds. You do **not** drop like a rock.
+3. Short takeoff: power, rotate, nacelle down — gain speed, stay flying.
+4. Hangar → **F-35**. Hover is still strong. Lower **VEC**, rotate, convert — same: pitch works, no death spiral.
+5. Eyes closed: Osprey slap/rumble vs F-35 whine. Different.
+6. Open **Settings** mid-hover → paused. Close → still paused until **Resume**.
 
 ## Shout if (fail)
 
-- Settings open and the bird **keeps flying**
-- Close Settings and it **auto-resumes**
-- Tilt jumps / re-zeros around 400 ft or when nacelles start moving
-- No **Level** cue after Cal
-- Gyro drop silently rewrites Cal
-- F-35 VL feels weak / falls out converting unless you’re already fast
-- v2 regressions: cyclic stick with Tilt on, no Cal in flight, yaw is a round stick, Casual stick-up = nose down
+- Convert at altitude: pitch dead, speed bleeds, falls out (the old bug)
+- Short takeoff drops you the moment nacelles/VEC move
+- F-35 hover OK but convert still dies
+- Osprey and F-35 sound the same
+- Settings doesn’t pause / Close auto-resumes (v3 regression)
+- Tilt stick still showing / yaw is a round stick (v2 regression)
 
-Laptop tilt = **no signal** is expected. Phone is the real test.
+Laptop: no gyro. Phone is the tilt test. Convert/pitch is testable on either.

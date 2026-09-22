@@ -152,7 +152,12 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         simNow.bird,
       )
       stepSim(simNow, controls, dt)
-      audioRef.current.update(simNow.craft.rotorRpm, simNow.controls.tcl, simNow.craft.nacelleDeg)
+      audioRef.current.update(
+        simNow.craft.rotorRpm,
+        simNow.controls.tcl,
+        simNow.bird === 'f35' ? simNow.craft.vectorPos : simNow.craft.nacelleDeg,
+        simNow.bird,
+      )
 
       const canvas = canvasRef.current
       if (canvas) {

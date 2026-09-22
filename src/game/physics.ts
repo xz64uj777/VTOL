@@ -5,14 +5,23 @@ import {
   APL_YAW_RATE,
   CD0,
   CD_INDUCED,
+  CL0,
   CL_ALPHA,
+  CONV_BRIDGE,
   CONV_MAX_SPEED,
   CONV_MIN_ALT,
   CONV_MIN_SPEED,
+  CONV_PITCH_FLOOR,
+  CONV_WING_SPEED,
+  CYCLIC_THRUST_TIP,
   DRAG_H,
   DRAG_V,
   F35_CD0,
   F35_CL,
+  F35_CL0,
+  F35_CONV_BRIDGE,
+  F35_CONV_WING_SPEED,
+  F35_DRAG_H,
   F35_GEAR_H,
   F35_HOVER_THR,
   F35_LIFT_FAN,
@@ -180,7 +189,7 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   if (mode === 'CONV' || (mode === 'HEL' && c.nacelleDeg < 85) || (mode === 'APL' && c.nacelleDeg > 5)) {
     if (speedKt < CONV_MIN_SPEED && c.nacelleDeg < 70) {
       envelopeWarn = 'SLOW — accelerate before converting down'
-      if (experience === 'advanced' && c.nacelleDeg < 50) c.vy -= 2.5 * dt
+      if (experience === 'advanced' && c.nacelleDeg < 50) c.vy -= 1.2 * dt
     } else if (speedKt > CONV_MAX_SPEED && c.nacelleDeg > 40) {
       envelopeWarn = 'FAST — slow before converting up'
     } else if (agl < CONV_MIN_ALT && mode === 'CONV' && !c.onGround) {
@@ -190,7 +199,8 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
     }
   }
 
-  const pitchRate = lerp(APL_PITCH_RATE, PITCH_RATE, helFrac)
+  // v4: pitch authority floor through CONV — stick always commands pitch
+  const pitchRate = Math.max(lerp(APL_PITCH_RATE, PITCH_RATE, helFrac), CONV_PITCH_FLOOR)
   const rollRate = lerp(APL_ROLL_RATE, ROLL_RATE, helFrac)
   const yawRate = lerp(APL_YAW_RATE, YAW_RATE, helFrac)
 
@@ -205,12 +215,16 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   c.roll += rollCmd * dt
   c.yaw = wrapAngle(c.yaw + yawCmd * dt)
 
-  const pitchLim = lerp(0.4, 0.55, helFrac)
+  // Wider limits in CONV so short-takeoff rotate / dive-for-speed works
+  const pitchLim = mode === 'CONV' ? 0.65 : lerp(0.5, 0.58, helFrac)
   const rollLim = lerp(0.85, 0.65, helFrac)
   c.pitch = clamp(c.pitch, -pitchLim, pitchLim)
   c.roll = clamp(c.roll, -rollLim, rollLim)
-  if (Math.abs(ctrl.cyclicPitch) < 0.05) c.pitch *= Math.exp(-0.3 * dt)
-  if (Math.abs(ctrl.cyclicRoll) < 0.05) c.roll *= Math.exp(-0.35 * dt)
+  // v4: never fight stick toward zero — only gentle center when stick is dead
+  const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
+  const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
+  if (!stickPitchLive) c.pitch *= Math.exp(-0.22 * dt)
+  if (!stickRollLive) c.roll *= Math.exp(-0.28 * dt)
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -226,9 +240,21 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const uy = cp * cr
   const uz = cy * sp * cr - sy * sr
 
-  const tx = Math.sin(nacRad) * ux + Math.cos(nacRad) * fxB
-  const ty = Math.sin(nacRad) * uy + Math.cos(nacRad) * fyB
-  const tz = Math.sin(nacRad) * uz + Math.cos(nacRad) * fzB
+  let tx = Math.sin(nacRad) * ux + Math.cos(nacRad) * fxB
+  let ty = Math.sin(nacRad) * uy + Math.cos(nacRad) * fyB
+  let tz = Math.sin(nacRad) * uz + Math.cos(nacRad) * fzB
+
+  // v4: direct cyclic → thrust tip (heli-like). +cyclicPitch = tip thrust forward.
+  // Stays alive through CONV so "pitch forward" accelerates even before attitude catches.
+  const tipBlend = helFrac * 0.75 + (mode === 'CONV' ? 0.45 : mode === 'HEL' ? 0.25 : 0.08)
+  const tip = clamp(ctrl.cyclicPitch, -1, 1) * CYCLIC_THRUST_TIP * tipBlend
+  tx += tip * fxB
+  ty += tip * fyB
+  tz += tip * fzB
+  const tMag = Math.hypot(tx, ty, tz) || 1
+  tx /= tMag
+  ty /= tMag
+  tz /= tMag
 
   const ge = GE_BONUS * Math.exp(-agl / GE_HEIGHT) * helFrac * (c.onGround ? 0.35 : 1)
   const thrustMag = MAX_THRUST * ctrl.tcl * (0.7 + 0.3 * c.rotorRpm) * powerAvail * (1 + ge)
@@ -239,19 +265,21 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
 
   const airspeed = Math.hypot(c.vx, c.vy, c.vz)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
-  const wingOn = clamp(aplFrac * 1.15, 0, 1) * clamp(airspeed / 25, 0, 1)
+  // Wing comes online earlier so convert has a lift path
+  const wingOn = clamp(aplFrac * 1.25, 0, 1) * clamp(airspeed / 16, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 2) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
     const aoa = c.pitch - vPitch
     c.aoa = aoa
-    const cl = clamp(CL_ALPHA * aoa + FLAP_CL * c.flaps, -1.2, 1.6)
+    const cl = clamp(CL0 + CL_ALPHA * aoa + FLAP_CL * c.flaps, -1.2, 1.85)
     const cd = CD0 + CD_INDUCED * cl * cl + FLAP_CD * c.flaps
     const lift = qDyn * WING_AREA * cl * wingOn
-    const drag = qDyn * WING_AREA * cd * wingOn
+    const drag = qDyn * WING_AREA * cd * wingOn * 0.85
     fx += ux * lift
     fy += uy * lift
     fz += uz * lift
+    /* wing vert tracked via fy */
     if (airspeed > 0.1) {
       fx -= (c.vx / airspeed) * drag
       fy -= (c.vy / airspeed) * drag
@@ -261,16 +289,34 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
     c.aoa = c.pitch
   }
 
-  fx -= c.vx * DRAG_H * MASS * (0.35 + helFrac * 0.35) * (0.4 + airspeed * 0.015)
-  fz -= c.vz * DRAG_H * MASS * (0.35 + helFrac * 0.35) * (0.4 + airspeed * 0.015)
-  fy -= c.vy * DRAG_V * MASS * 0.12 * (0.5 + helFrac * 0.5)
+  // —— Conversion lift bridge (v4) ——
+  // As nacelle tilts, rotor vertical drops before wing q is enough. Fill the gap
+  // so short-takeoff / convert doesn't dump altitude. Fades with wing readiness.
+  const wingReady = clamp(airspeed / CONV_WING_SPEED, 0, 1) * clamp(aplFrac * 1.1, 0, 1)
+  const tilted = clamp((90 - c.nacelleDeg) / 75, 0, 1) // 0 HEL → 1 deep convert
+  const bridgeNeed = tilted * (1 - wingReady) * CONV_BRIDGE
+  const bridgeFy = MASS * GRAVITY * ctrl.tcl * powerAvail * bridgeNeed
+  fy += bridgeFy
+  // Slight forward assist while bridging so rotate+power gains speed (STO profile)
+  if (bridgeNeed > 0.05 && ctrl.tcl > 0.45) {
+    const stoPush = MASS * (2.8 + ctrl.cyclicPitch * 3.5) * bridgeNeed * ctrl.tcl
+    fx += fxB * stoPush
+    fz += fzB * stoPush
+  }
 
-  if (c.vy < 0 && ctrl.tcl > 0.3 && helFrac > 0.5) {
+  // Parasite drag — much lighter in CONV/APL (v4 energy retention)
+  const dragScale = (0.22 + helFrac * 0.18) * (0.32 + airspeed * 0.006)
+  fx -= c.vx * DRAG_H * MASS * dragScale
+  fz -= c.vz * DRAG_H * MASS * dragScale
+  fy -= c.vy * DRAG_V * MASS * 0.08 * (0.4 + helFrac * 0.4)
+
+  // Settle / VRS-like — only when not intentionally pitching for speed
+  if (c.vy < 0 && ctrl.tcl > 0.3 && helFrac > 0.55 && !stickPitchLive) {
     fy -= SETTLE * MASS * (-c.vy) * ctrl.tcl * helFrac
   }
   if (c.gearDown && aplFrac > 0.5) {
-    fx -= c.vx * 0.15 * MASS
-    fz -= c.vz * 0.15 * MASS
+    fx -= c.vx * 0.1 * MASS
+    fz -= c.vz * 0.1 * MASS
   }
 
   c.vx += (fx / MASS) * dt
@@ -302,14 +348,12 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   c.flaps = lerp(c.flaps, clamp(ctrl.flaps, 0, 1), 1 - Math.exp(-3 * dt))
 
   const mode = modeFromVector(c.vectorPos)
-  // vlFrac: 0 CTOL → 1 VL (nozzle/fan vertical)
   const vlFrac = clamp(c.vectorPos, 0, 1)
   const stovlBlend = mode === 'STOVL' ? 1 : mode === 'VL' ? 1 : 0
 
   const eng = c.engineL * (c.electricsOn ? 1 : 0.2) * (0.45 + 0.55 * c.fuel)
   const powerAvail = clamp(eng * (c.failAsymmetric ? 0.7 : 1), 0, 1)
 
-  // Fan/rpm cue scales with VL demand
   const wantRpm = 0.1 + ctrl.tcl * (0.5 + vlFrac * 0.45) * powerAvail
   c.rotorRpm += (wantRpm - c.rotorRpm) * (1 - Math.exp(-4 * dt))
 
@@ -332,11 +376,11 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     envelopeWarn = 'CTOL — keep speed / AoA'
   }
 
+  // v4: full pitch authority in every mode (no mode bleed to zero)
   const pitchCmd = ctrl.cyclicPitch * F35_PITCH_RATE
   let rollCmd = ctrl.cyclicRoll * F35_ROLL_RATE
   let yawCmd = ctrl.yaw * F35_YAW_RATE * (mode === 'CTOL' ? clamp(speedHoriz / 50, 0.2, 1) : 1)
   if (c.failAsymmetric) rollCmd += 0.2
-  // VL: stick more like heli cyclic for translation
   if (mode === 'VL') {
     yawCmd += ctrl.tcl * 0.04 * ctrl.cyclicRoll
   }
@@ -345,11 +389,13 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   c.roll += rollCmd * dt
   c.yaw = wrapAngle(c.yaw + yawCmd * dt)
 
-  const pitchLim = mode === 'VL' ? 0.45 : 0.55
+  const pitchLim = mode === 'STOVL' ? 0.62 : mode === 'VL' ? 0.5 : 0.58
   c.pitch = clamp(c.pitch, -pitchLim, pitchLim)
   c.roll = clamp(c.roll, -0.9, 0.9)
-  if (Math.abs(ctrl.cyclicPitch) < 0.05) c.pitch *= Math.exp(-0.28 * dt)
-  if (Math.abs(ctrl.cyclicRoll) < 0.05) c.roll *= Math.exp(-0.32 * dt)
+  const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
+  const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
+  if (!stickPitchLive) c.pitch *= Math.exp(-0.2 * dt)
+  if (!stickRollLive) c.roll *= Math.exp(-0.26 * dt)
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -366,43 +412,55 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const uz = cy * sp * cr - sy * sr
 
   // Main nozzle: tilts from aft (CTOL) toward down (VL)
-  const nozzleDown = vlFrac // 0 aft, 1 down
-  const nx = (1 - nozzleDown) * fxB + nozzleDown * ux
-  const ny = (1 - nozzleDown) * fyB + nozzleDown * uy
-  const nz = (1 - nozzleDown) * fzB + nozzleDown * uz
+  let nozzleDown = vlFrac
+  let nx = (1 - nozzleDown) * fxB + nozzleDown * ux
+  let ny = (1 - nozzleDown) * fyB + nozzleDown * uy
+  let nz = (1 - nozzleDown) * fzB + nozzleDown * uz
 
-  // v3: slight VL/STOVL thrust boost so conversion needs less forward speed
-  const stovlBoost = 1 + vlFrac * 0.18
+  // Direct stick tip on nozzle (STOVL/VL) so pitch forward always does something
+  const tipBlend = mode === 'CTOL' ? 0.12 : 0.4
+  const tip = clamp(ctrl.cyclicPitch, -1, 1) * tipBlend
+  nx += tip * fxB
+  ny += tip * fyB
+  nz += tip * fzB
+  const nMag = Math.hypot(nx, ny, nz) || 1
+  nx /= nMag
+  ny /= nMag
+  nz /= nMag
+
+  const stovlBoost = 1 + vlFrac * 0.2
   const mainThrust =
     F35_MAX_THRUST * ctrl.tcl * powerAvail * (0.75 + 0.25 * c.rotorRpm) * stovlBoost
 
-  // Lift fan — engages earlier / stronger in STOVL→VL (v3)
-  const fanFrac = clamp((vlFrac - 0.12) / 0.72, 0, 1)
-  const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanFrac * powerAvail * (0.65 + 0.35 * c.rotorRpm)
-  const ge = 0.18 * Math.exp(-agl / 8) * fanFrac * (c.onGround ? 0.3 : 1)
+  // Lift fan — hold longer into STOVL until wing ready (v4 bridge)
+  const airspeedEarly = Math.hypot(c.vx, c.vy, c.vz)
+  const wingReadyEarly = clamp(airspeedEarly / F35_CONV_WING_SPEED, 0, 1)
+  const fanFrac = clamp((vlFrac - 0.08) / 0.75, 0, 1)
+  // Don't dump fan solely because vector moved — keep residual until wing q is there
+  const fanKeep = Math.max(fanFrac, (1 - wingReadyEarly) * clamp(vlFrac / 0.35, 0, 1) * 0.55)
+  const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanKeep * powerAvail * (0.65 + 0.35 * c.rotorRpm)
+  const ge = 0.18 * Math.exp(-agl / 8) * fanKeep * (c.onGround ? 0.3 : 1)
 
   let fx = nx * mainThrust + ux * fanThrust * (1 + ge)
   let fy = ny * mainThrust + uy * fanThrust * (1 + ge) - F35_MASS * GRAVITY
   let fz = nz * mainThrust + uz * fanThrust * (1 + ge)
 
-  // In VL, stick tilt translates via body-up component (heli-like)
   if (mode === 'VL' || (mode === 'STOVL' && speedKt < 60)) {
     fx += ux * ctrl.tcl * F35_MASS * 2.5 * stovlBlend * 0.15
-    // already in thrust vector
   }
 
   const airspeed = Math.hypot(c.vx, c.vy, c.vz)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
-  const wingOn = clamp(1 - vlFrac * 0.8, 0.18, 1) * clamp(airspeed / 22, 0, 1)
+  const wingOn = clamp(1 - vlFrac * 0.65, 0.22, 1) * clamp(airspeed / 16, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 3) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
     const aoa = c.pitch - vPitch
     c.aoa = aoa
-    const cl = clamp(F35_CL * aoa + FLAP_CL * c.flaps * 0.8, -1.1, 1.5)
-    const cd = F35_CD0 + 0.07 * cl * cl + FLAP_CD * c.flaps * 0.7
+    const cl = clamp(F35_CL0 + F35_CL * aoa + FLAP_CL * c.flaps * 0.8, -1.1, 1.7)
+    const cd = F35_CD0 + 0.055 * cl * cl + FLAP_CD * c.flaps * 0.65
     const lift = qDyn * F35_WING * cl * wingOn
-    const drag = qDyn * F35_WING * cd * wingOn
+    const drag = qDyn * F35_WING * cd * wingOn * 0.85
     fx += ux * lift
     fy += uy * lift
     fz += uz * lift
@@ -415,14 +473,29 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     c.aoa = c.pitch
   }
 
-  // Parasite drag
-  fx -= c.vx * 0.35 * F35_MASS * (0.3 + airspeed * 0.012)
-  fz -= c.vz * 0.35 * F35_MASS * (0.3 + airspeed * 0.012)
-  fy -= c.vy * 1.6 * F35_MASS * 0.1
+  // Conversion lift bridge: vector tilting aft before wing carries
+  const wingReady = clamp(airspeed / F35_CONV_WING_SPEED, 0, 1) * clamp(1 - vlFrac * 0.7, 0.15, 1)
+  const tilted = clamp((0.95 - vlFrac) / 0.85, 0, 1) // 0 at VL → 1 toward CTOL
+  const inConvert = mode === 'STOVL' || (mode === 'CTOL' && vlFrac > 0.05) || (mode === 'VL' && vlFrac < 0.95)
+  if (inConvert) {
+    const bridgeNeed = tilted * (1 - wingReady) * F35_CONV_BRIDGE
+    fy += F35_MASS * GRAVITY * ctrl.tcl * powerAvail * bridgeNeed
+    if (bridgeNeed > 0.05 && ctrl.tcl > 0.4) {
+      const stoPush = F35_MASS * (3.2 + ctrl.cyclicPitch * 4) * bridgeNeed * ctrl.tcl
+      fx += fxB * stoPush
+      fz += fzB * stoPush
+    }
+  }
+
+  // Parasite drag — lower bleed in STOVL convert (v4)
+  const dragScale = (0.25 + vlFrac * 0.12) * (0.3 + airspeed * 0.0055)
+  fx -= c.vx * F35_DRAG_H * F35_MASS * dragScale
+  fz -= c.vz * F35_DRAG_H * F35_MASS * dragScale
+  fy -= c.vy * 1.2 * F35_MASS * 0.08
 
   if (c.gearDown && mode === 'CTOL') {
-    fx -= c.vx * 0.12 * F35_MASS
-    fz -= c.vz * 0.12 * F35_MASS
+    fx -= c.vx * 0.1 * F35_MASS
+    fz -= c.vz * 0.1 * F35_MASS
   }
 
   c.vx += (fx / F35_MASS) * dt
@@ -433,12 +506,11 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   c.z += c.vz * dt
 
   const contactH = c.gearDown ? F35_GEAR_H : F35_GEAR_H * 0.5
-  const plantThr = mode === 'VL' ? 0.58 : mode === 'STOVL' ? 0.4 : 0.22
+  const plantThr = mode === 'VL' ? 0.55 : mode === 'STOVL' ? 0.38 : 0.22
   plantGear(c, contactH, ctrl, plantThr, dt)
 
-  // Soft sink cue if VL throttle too low
   if (mode === 'VL' && !c.onGround && ctrl.tcl < F35_HOVER_THR - 0.15 && experience === 'advanced') {
-    c.vy -= 1.2 * dt
+    c.vy -= 1.0 * dt
   }
 
   return envelopeWarn

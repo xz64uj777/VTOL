@@ -1,35 +1,43 @@
-# Kyle fly feedback → Osprey Flight v3
+# Kyle fly feedback → Osprey Flight v4
 
 Short list for anyone uploading to https://github.com/xz64uj777/VTOL
 
-**Note:** as of check, github.com/xz64uj777/VTOL had a v2-ish tree (docs + src) but was still thin vs a full handoff — **v3 zip is the handoff for big-Grok**.
+**Note:** **v4 zip is the handoff for big-Grok** (convert / pitch hard blocker).
 
-## Asked for (must-fix) — v3
+## Asked for (must-fix) — v4 HARD BLOCKER
 
-1. **Settings pauses** — opening Settings (or Systems menu) must **pause** the sim; closing resumes only if he unpauses / explicit Resume. Don’t keep flying under the sheet.
-2. **Tilt phantom recal ~400 ft / nacelle rotation** — tilt/gyro must NOT auto-recalibrate mid-flight. Freeze the calibration zero after Cal; ignore slow bias during climb/convert. Add a **Level / horizon instructor** cue (wings-level or “Level · hold”) so he can see when phone isn’t level vs when gyro zero drifted.
-3. If gyro loses sustained live, show sticky no-signal — don’t silently rewrite the zero.
-4. **F-35 more thrust / STOVL** — increase available thrust (esp. VL/STOVL / lift-fan + vector) so conversion/rotation needs **less forward speed** to stay flying; VL hover should feel stronger. Don’t break CTOL completely.
+**Repro (both birds):** ~1000 ft, start rotation/convert, ~80 mph pitching forward → altitude drops, **pitch forward does nothing** (even nose-dive fails), speed bleeds, falls like a rock. F-35: more power helps hover but short takeoff / convert same failure — rotate, lose forward speed, drop, can’t pitch.
 
-## Still good from v2 (don’t regress)
+1. **Pitch authority during CONV / STOVL convert** — cyclic/stick must always command pitch; never zero or fight to zero mid-convert. Check tilt overlay, mode blends, AoA clamps, rate limits.
+2. **Conversion lift bridge** — as nacelle/VEC rotates, don’t dump rotor/fan lift before wing/jet lift is there. Smooth HEL→CONV→APL (and F-35 VL→STOVL→CTOL) so he can accelerate without falling. Allow short-takeoff profile: rotate with power, gain speed without rock-drop.
+3. **Bleed energy** — reduce excessive drag/speed bleed during convert; pitching forward should trade altitude for speed or hold energy better.
+4. **Distinct audio** — Osprey proprotor vs F-35 jet/fan must sound different (not the same loop).
 
-1. Calibration during flight — Settings / Cal on deck + Systems → Flight
-2. Hide cyclic stick when Tilt ON
-3. Yaw = bar L/R; layout yaw LEFT; TCL/THR + NAC/VEC RIGHT
-4. Casual pitch — stick-up = nose UP
-5. ALT / FL on HUD; denser landscape
+## Root cause (v3 → v4)
 
-## Softs still parked (not v3 blockers)
+1. Wing had **no CL0 / incidence** → level attitude produced **zero wing lift**; CONV/APL could not carry weight at ~80 mph within pitch limits.
+2. Nacelle/VEC tilt **dumped rotor/fan vertical** before wing dynamic pressure was ready (lift hole mid-convert).
+3. **DRAG_H ≈ 0.42** → ~8–14 m/s² parasite bleed; pitching forward could not overcome deceleration.
+4. Pitch auto-center + no cyclic→thrust tip made stick feel dead while energy collapsed.
+5. Audio: one sawtooth; F-35 still keyed off `nacelleDeg` (always 0).
 
-- F-35 **AOA** HUD wild in VL / low-speed with sink
-- F-35 **audio** still keyed off nacelleDeg (stays 0)
-- VL “stick translate” mostly attitude→thrust tilt
-- Osprey plantThr snap at HEL mode label boundary
+## Still good from v3 (don’t regress)
+
+1. Settings / Systems pause; close does not auto-resume
+2. Gyro zero freezes after Cal; sticky no-signal; Level · hold cue
+3. F-35 stronger VL hover thrust (kept / slightly raised)
+4. Cal mid-flight; hide cyclic when Tilt ON; yaw bar L; Casual pitch; ALT/FL; landscape
+
+## Softs still parked
+
+- F-35 AOA HUD still a bit noisy in VL sink (improved low-spd path remains)
+- VL “stick translate” still mostly attitude + thrust tip
 - Envelope warnings can overwrite hover tips
 
-## How to verify v3
+## How to verify v4
 
-- Open Settings mid-hover → sim **PAUSED**; Close → still paused until Resume
-- Open Systems (Menu) → paused; Esc/close → still paused until Resume
-- Tilt ON → Cal on deck (wings-level) → climb / start Osprey NAC rotation ~400 ft — zero must **not** rewrite; Level cue shows phone vs frozen zero; brief signal drop → sticky no-signal, then resume with **same** zero
-- F-35 VL hover feels stronger; STOVL/convert stays flying at lower forward speed than v2; CTOL still accelerates / flies
+- ~1000 ft AGL, ~80 mph, start Osprey NAC convert while pitching forward — **must keep pitch authority**, accelerate or hold energy, **not rock-drop**
+- Short takeoff: raise TCL, rotate (pitch), convert nacelle — gain speed without falling out
+- Same profile F-35: VL/STOVL → lower VEC, rotate, convert — pitch works; no speed bleed death spiral
+- Eyes closed: Osprey rumble/slap ≠ F-35 jet/fan whine
+- v3 checks still pass (Settings pause, tilt freeze, Level cue)

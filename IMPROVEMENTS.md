@@ -37,6 +37,8 @@ Chase / Pad / Orbit — speed-scaled lead + error snap (Helios/Copter).
 - [x] Gyro tilt cyclic (v2)
 - [x] Freeze gyro zero + Level cue + Settings pause (v3)
 - [x] F-35 stronger VL/STOVL thrust (v3)
+- [x] Convert pitch auth + lift bridge + energy (v4)
+- [x] Distinct Osprey vs F-35 audio (v4)
 - [ ] Stronger CONV / VL vortex-ring cues
 - [ ] three.js mesh if phone FPS OK
 - [ ] F-35 afterburner / weapon stations (visual only)
@@ -65,3 +67,13 @@ Chase / Pad / Orbit — speed-scaled lead + error snap (Helios/Copter).
 - Gyro zero freezes after Cal; no mid-flight silent rewrite; sticky no-signal on lose live
 - HUD Level · hold / bank-pitch instructor vs frozen zero
 - F-35: more MAX_THRUST + LIFT_FAN, earlier fan, STOVL boost, lower hover TCL; convert needs less fwd speed
+
+
+## Changelog v4
+
+- **Hard blocker:** pitch dead + rock-drop on convert (~1000 ft / ~80 mph) — both birds
+- Pitch authority floor in CONV; no stick-fight auto-center; cyclic→thrust tip through convert
+- Conversion lift bridge (rotor/fan → wing) + wing CL0; earlier wing-on; STO push with power
+- Drag/energy: DRAG_H cut; lighter convert parasite; settle only when stick idle
+- F-35: fan keep until wing ready; STOVL bridge; audio uses vectorPos
+- Audio: Osprey proprotor slap ≠ F-35 jet/fan bandpass
