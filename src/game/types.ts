@@ -1,7 +1,8 @@
 import type { QualityKey } from './config'
 
 export type Phase = 'hangar' | 'flight'
-export type CamMode = 'chase' | 'pad' | 'orbit'
+/** Camera modes — chase, wing/side, tower, pad, orbit. */
+export type CamMode = 'chase' | 'wing' | 'tower' | 'pad' | 'orbit'
 export type BirdKind = 'osprey' | 'f35'
 
 /** Osprey flight mode from nacelle. */
@@ -57,6 +58,10 @@ export type Craft = {
   electricsOn: boolean
   failAsymmetric: boolean
   failHyd: boolean
+  /** Stub: parking brake (ground only cue). */
+  parkingBrake: boolean
+  /** Stub: nav/landing lights. */
+  lightsOn: boolean
 }
 
 export type Cam = {
@@ -66,6 +71,10 @@ export type Cam = {
   yaw: number
   pitch: number
   dist: number
+  /** Touch orbit yaw offset (radians) — chase/wing/orbit. */
+  yawOff: number
+  /** Touch pitch offset (radians). */
+  pitchOff: number
 }
 
 export type Hud = {
@@ -73,9 +82,14 @@ export type Hud = {
   /** Flight level = round(alt_ft / 100). */
   fl: number
   speed: number
+  /** Vertical speed m/s. */
+  vs: number
   hdg: number
   nacelleDeg: number
+  /** F-35 vector 0..1; Osprey unused (HUD shows NAC). */
+  vectorPos: number
   aoaDeg: number
+  rpm: number
   mode: FlightMode
   bird: BirdKind
   tcl: number
@@ -83,6 +97,8 @@ export type Hud = {
   cam: CamMode
   quality: QualityKey
   envelopeWarn: string
+  gearDown: boolean
+  flaps: number
 }
 
 export type SystemsPanel =

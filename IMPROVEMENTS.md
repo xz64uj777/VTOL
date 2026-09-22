@@ -1,14 +1,24 @@
 # Osprey Flight — IMPROVEMENTS
 
+## v7 (2026-09-22)
+
+### Realism slice — cam / audio / deck / airport
+
+- **Touch camera:** drag empty sky pans yaw/pitch offset; double-tap (sky or Cam) resets.
+- **Modes:** chase · wing · tower · pad · orbit; heavier chase damp; v6 tether retained.
+- **F-35 roar:** deep dual-roar + restrained scream + AB grit (no model-plane whine); Osprey slap stays.
+- **Deck panel:** gear / flaps / lights / park + ASI ALT VS HDG NAC·VEC N1 (Intermediate+ default).
+- **Airport:** runway markings, taxiway, hangars, tower, windsock; spawn on pad / threshold.
+
 ## v6 (2026-09-22)
 
 ### HARD — convert camera / black HUD / tilt / F-35 jet
 
-- **Chase tether:** craft-in-view snap + kill velocity lead on convert/decel/sink + hard 1.15× wantDist tether. Always look at craft.
-- **sanitizeSim:** freeze + `SIM FAULT — Reset` on non-finite craft; recreate cam; physics accel/lift/AoA caps.
+- **Chase tether:** craft-in-view snap + kill velocity lead on convert/decel/sink + hard 1.15× wantDist tether.
+- **sanitizeSim:** freeze + `SIM FAULT — Reset` on non-finite craft; recreate cam; physics caps.
 - **HUD:** finite guards → `---` / 0, never Infinity.
 - **Tilt holdover 5s** + keep `gyroReady` + re-arm orientation listeners on >1s silence.
-- **F-35 jet audio:** deep roar + mid scream + AB rumble (CTOL/high THR); VL fan retained; Osprey slap unchanged.
+- **F-35 jet audio (v6):** deep roar + mid scream + AB rumble — refined further in v7.
 
 ## v5
 
@@ -30,3 +40,4 @@
 - F-35 AOA HUD noise in VL
 - Envelope tips overwrite hover tips
 - Synth not recorded samples
+- Park/lights stubs; simple airport scenery

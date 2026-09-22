@@ -1,4 +1,14 @@
-import { GEAR_H, PAD_R, PAD_X, PAD_Z, QUALITY } from './config'
+import {
+  GEAR_H,
+  PAD_R,
+  PAD_X,
+  PAD_Z,
+  QUALITY,
+  RWY_HALF_W,
+  RWY_X,
+  RWY_Z0,
+  RWY_Z1,
+} from './config'
 import { clamp } from './physics'
 import type { Cam, Craft, Sim } from './types'
 
@@ -44,6 +54,7 @@ export class Renderer {
     this.rotorPhase += dt * (7 + sim.craft.rotorRpm * 38)
     this.sky(ctx, w, h, sim.craft.y)
     this.ground(ctx, sim, w, h, q.groundDetail)
+    this.airport(ctx, sim.cam, w, h)
     this.pad(ctx, sim.cam, w, h)
     this.buildings(ctx, sim, w, h, q.buildings)
     this.trees(ctx, sim, w, h, q.trees)
@@ -117,6 +128,208 @@ export class Renderer {
     ctx.restore()
   }
 
+
+  /** Simple airport: runway strip, taxiway, hangar/terminal, tower, windsock. */
+  private airport(ctx: CanvasRenderingContext2D, cam: Cam, w: number, h: number) {
+    const half = RWY_HALF_W
+    const x0 = RWY_X - half
+    const x1 = RWY_X + half
+    const z0 = RWY_Z0
+    const z1 = RWY_Z1
+
+    const quad = (
+      pts: Pt[],
+      fill: string,
+      stroke?: string,
+      lw = 1,
+    ) => {
+      const proj = pts.map((p) => project({ ...p, y: p.y ?? 0 }, cam, w, h))
+      if (proj.some((p) => !p)) return
+      ctx.beginPath()
+      ctx.moveTo(proj[0]!.x, proj[0]!.y)
+      for (const p of proj) ctx.lineTo(p!.x, p!.y)
+      ctx.closePath()
+      ctx.fillStyle = fill
+      ctx.fill()
+      if (stroke) {
+        ctx.strokeStyle = stroke
+        ctx.lineWidth = lw
+        ctx.stroke()
+      }
+    }
+
+    // Runway asphalt
+    quad(
+      [
+        { x: x0, y: 0.02, z: z0 },
+        { x: x1, y: 0.02, z: z0 },
+        { x: x1, y: 0.02, z: z1 },
+        { x: x0, y: 0.02, z: z1 },
+      ],
+      'rgba(52,56,62,0.92)',
+      'rgba(90,95,100,0.5)',
+      1.5,
+    )
+
+    // Centerline dashes
+    const dashLen = 10
+    const gap = 8
+    for (let z = z0 + 8; z < z1 - 8; z += dashLen + gap) {
+      const a = project({ x: RWY_X, y: 0.04, z }, cam, w, h)
+      const b = project({ x: RWY_X, y: 0.04, z: Math.min(z + dashLen, z1 - 6) }, cam, w, h)
+      if (!a || !b) continue
+      ctx.strokeStyle = 'rgba(240,240,220,0.85)'
+      ctx.lineWidth = Math.max(1.5, 55 / ((a.d + b.d) / 2))
+      ctx.lineCap = 'butt'
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+    }
+
+    // Edge lines
+    for (const ex of [x0 + 0.8, x1 - 0.8]) {
+      const a = project({ x: ex, y: 0.04, z: z0 + 4 }, cam, w, h)
+      const b = project({ x: ex, y: 0.04, z: z1 - 4 }, cam, w, h)
+      if (!a || !b) continue
+      ctx.strokeStyle = 'rgba(230,230,210,0.7)'
+      ctx.lineWidth = Math.max(1, 40 / ((a.d + b.d) / 2))
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+    }
+
+    // Threshold bars (both ends)
+    for (const zBase of [z0 + 6, z1 - 14]) {
+      for (let i = 0; i < 6; i++) {
+        const sx = RWY_X - half + 2.2 + i * 3.5
+        const a = project({ x: sx, y: 0.05, z: zBase }, cam, w, h)
+        const b = project({ x: sx, y: 0.05, z: zBase + 8 }, cam, w, h)
+        if (!a || !b) continue
+        ctx.strokeStyle = 'rgba(245,245,230,0.9)'
+        ctx.lineWidth = Math.max(2, 48 / ((a.d + b.d) / 2))
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        ctx.stroke()
+      }
+    }
+
+    // Taxiway hint pad ↔ runway
+    quad(
+      [
+        { x: PAD_X + 8, y: 0.015, z: PAD_Z - 6 },
+        { x: PAD_X + 8, y: 0.015, z: PAD_Z + 6 },
+        { x: RWY_X - half - 1, y: 0.015, z: 12 },
+        { x: RWY_X - half - 1, y: 0.015, z: 0 },
+      ],
+      'rgba(58,62,68,0.85)',
+      'rgba(180,160,80,0.35)',
+      1,
+    )
+
+    // Small terminal / hangar boxes west of runway
+    const hangars: { x: number; z: number; bw: number; bd: number; bh: number; color: string }[] = [
+      { x: -48, z: -40, bw: 10, bd: 8, bh: 7, color: 'rgb(72,78,88)' },
+      { x: -52, z: -18, bw: 8, bd: 12, bh: 6, color: 'rgb(68,74,82)' },
+      { x: 38, z: 40, bw: 9, bd: 7, bh: 5.5, color: 'rgb(70,76,84)' },
+    ]
+    for (const hng of hangars) {
+      const { x: bx, z: bz, bw, bd, bh, color } = hng
+      const corners = [
+        { x: bx - bw, y: 0, z: bz - bd },
+        { x: bx + bw, y: 0, z: bz - bd },
+        { x: bx + bw, y: 0, z: bz + bd },
+        { x: bx - bw, y: 0, z: bz + bd },
+        { x: bx - bw, y: bh, z: bz - bd },
+        { x: bx + bw, y: bh, z: bz - bd },
+        { x: bx + bw, y: bh, z: bz + bd },
+        { x: bx - bw, y: bh, z: bz + bd },
+      ]
+      const proj = corners.map((p) => project(p, cam, w, h))
+      if (proj.some((p) => !p)) continue
+      const roof = [4, 5, 6, 7].map((i) => proj[i]!)
+      ctx.beginPath()
+      ctx.moveTo(roof[0]!.x, roof[0]!.y)
+      for (const p of roof) ctx.lineTo(p.x, p.y)
+      ctx.closePath()
+      ctx.fillStyle = color
+      ctx.fill()
+      for (const idx of [
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+      ] as const) {
+        const pts = idx.map((j) => proj[j]!)
+        ctx.beginPath()
+        ctx.moveTo(pts[0]!.x, pts[0]!.y)
+        for (const p of pts) ctx.lineTo(p.x, p.y)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(40,48,56,0.65)'
+        ctx.fill()
+      }
+    }
+
+    // Control tower stub
+    const twx = -55
+    const twz = 70
+    const towerPts = [
+      { x: twx - 2.5, y: 0, z: twz - 2.5 },
+      { x: twx + 2.5, y: 0, z: twz - 2.5 },
+      { x: twx + 2.5, y: 0, z: twz + 2.5 },
+      { x: twx - 2.5, y: 0, z: twz + 2.5 },
+      { x: twx - 2.5, y: 22, z: twz - 2.5 },
+      { x: twx + 2.5, y: 22, z: twz - 2.5 },
+      { x: twx + 2.5, y: 22, z: twz + 2.5 },
+      { x: twx - 2.5, y: 22, z: twz + 2.5 },
+    ]
+    const tproj = towerPts.map((p) => project(p, cam, w, h))
+    if (!tproj.some((p) => !p)) {
+      const roof = [4, 5, 6, 7].map((i) => tproj[i]!)
+      ctx.beginPath()
+      ctx.moveTo(roof[0]!.x, roof[0]!.y)
+      for (const p of roof) ctx.lineTo(p.x, p.y)
+      ctx.closePath()
+      ctx.fillStyle = 'rgb(90,98,110)'
+      ctx.fill()
+      // Cab
+      const cab = project({ x: twx, y: 26, z: twz }, cam, w, h)
+      const cabBase = project({ x: twx, y: 22, z: twz }, cam, w, h)
+      if (cab && cabBase) {
+        const s = clamp(90 / cab.d, 3, 14)
+        ctx.fillStyle = 'rgba(140,180,210,0.75)'
+        ctx.fillRect(cab.x - s, cab.y - s * 0.7, s * 2, s * 1.1)
+        ctx.strokeStyle = '#d4a84a'
+        ctx.lineWidth = 1.5
+        ctx.strokeRect(cab.x - s, cab.y - s * 0.7, s * 2, s * 1.1)
+      }
+    }
+
+    // Windsock near pad
+    const wsx = PAD_X + PAD_R + 6
+    const wsz = PAD_Z - 8
+    const base = project({ x: wsx, y: 0, z: wsz }, cam, w, h)
+    const top = project({ x: wsx, y: 7, z: wsz }, cam, w, h)
+    const sock = project({ x: wsx + 4, y: 6.2, z: wsz + 1.5 }, cam, w, h)
+    if (base && top) {
+      ctx.strokeStyle = '#8890a0'
+      ctx.lineWidth = Math.max(1.5, 35 / base.d)
+      ctx.beginPath()
+      ctx.moveTo(base.x, base.y)
+      ctx.lineTo(top.x, top.y)
+      ctx.stroke()
+      if (sock) {
+        ctx.fillStyle = 'rgba(220,90,50,0.85)'
+        ctx.beginPath()
+        ctx.moveTo(top.x, top.y)
+        ctx.lineTo(sock.x, sock.y - 3)
+        ctx.lineTo(sock.x, sock.y + 3)
+        ctx.closePath()
+        ctx.fill()
+      }
+    }
+  }
+
   private pad(ctx: CanvasRenderingContext2D, cam: Cam, w: number, h: number) {
     const ring: Vec2[] = []
     for (let i = 0; i <= 36; i++) {
@@ -164,7 +377,8 @@ export class Renderer {
       const dist = 70 + hash(i + 2.2) * 150
       const bx = Math.cos(ang) * dist
       const bz = Math.sin(ang) * dist
-      if (Math.hypot(bx, bz) < 40) continue
+      if (Math.hypot(bx - PAD_X, bz - PAD_Z) < PAD_R + 18) continue
+      if (Math.abs(bx - RWY_X) < RWY_HALF_W + 22 && bz > RWY_Z0 - 20 && bz < RWY_Z1 + 20) continue
       const bw = 5 + hash(i + 3) * 9
       const bh = 7 + hash(i + 4) * 20
       const corners = [
@@ -210,6 +424,7 @@ export class Renderer {
       const tx = Math.cos(ang) * dist
       const tz = Math.sin(ang) * dist
       if (Math.hypot(tx - PAD_X, tz - PAD_Z) < PAD_R + 6) continue
+      if (Math.abs(tx - RWY_X) < RWY_HALF_W + 10 && tz > RWY_Z0 - 8 && tz < RWY_Z1 + 8) continue
       const base = project({ x: tx, y: 0, z: tz }, sim.cam, w, h)
       if (!base || base.d > 220) continue
       const s = clamp(28 / base.d, 1.5, 9)
@@ -225,6 +440,7 @@ export class Renderer {
       const tx = Math.cos(ang) * dist
       const tz = Math.sin(ang) * dist
       if (Math.hypot(tx - PAD_X, tz - PAD_Z) < PAD_R + 8) continue
+      if (Math.abs(tx - RWY_X) < RWY_HALF_W + 14 && tz > RWY_Z0 - 10 && tz < RWY_Z1 + 10) continue
       const kind = hash(i + 7) // 0..1 — mix round canopy / conifer
       const ht = 6 + hash(i) * 10
       const base = project({ x: tx, y: 0, z: tz }, sim.cam, w, h)

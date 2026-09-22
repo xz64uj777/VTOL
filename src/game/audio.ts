@@ -1,4 +1,4 @@
-/** Distinct Osprey proprotor slap vs F-35 jet roar via WebAudio. */
+/** Distinct Osprey proprotor slap vs F-35 fighter jet roar via WebAudio. */
 
 import type { BirdKind } from './types'
 
@@ -8,19 +8,24 @@ export class FlightAudio {
   private oscB: OscillatorNode | null = null
   private oscC: OscillatorNode | null = null
   private oscD: OscillatorNode | null = null
+  private oscE: OscillatorNode | null = null
   private gain: GainNode | null = null
   private thumpGain: GainNode | null = null
   private roarGain: GainNode | null = null
   private screamGain: GainNode | null = null
+  private abGain: GainNode | null = null
   private masterGain: GainNode | null = null
   private filter: BiquadFilterNode | null = null
   private roarFilter: BiquadFilterNode | null = null
   private screamFilter: BiquadFilterNode | null = null
+  private abFilter: BiquadFilterNode | null = null
   private lfo: OscillatorNode | null = null
   private lfoGain: GainNode | null = null
   private noise: AudioBufferSourceNode | null = null
   private noiseGain: GainNode | null = null
   private noiseFilter: BiquadFilterNode | null = null
+  private abNoise: AudioBufferSourceNode | null = null
+  private abNoiseGain: GainNode | null = null
   private started = false
   private muted = false
   private bird: BirdKind = 'osprey'
@@ -48,11 +53,14 @@ export class FlightAudio {
     this.oscB = this.ctx.createOscillator()
     this.oscC = this.ctx.createOscillator()
     this.oscD = this.ctx.createOscillator()
+    this.oscE = this.ctx.createOscillator()
     this.thumpGain = this.ctx.createGain()
     this.roarGain = this.ctx.createGain()
     this.screamGain = this.ctx.createGain()
+    this.abGain = this.ctx.createGain()
     this.roarFilter = this.ctx.createBiquadFilter()
     this.screamFilter = this.ctx.createBiquadFilter()
+    this.abFilter = this.ctx.createBiquadFilter()
 
     // Default Osprey routing: A/B -> filter, C -> thump -> filter
     this.oscA.connect(this.filter)
@@ -60,8 +68,9 @@ export class FlightAudio {
     this.oscC.connect(this.thumpGain)
     this.thumpGain.connect(this.filter)
 
-    // F-35 deep roar path (always connected; gain zeroed for Osprey)
+    // F-35 deep roar path
     this.oscD.connect(this.roarGain)
+    this.oscE.connect(this.roarGain)
     this.roarGain.connect(this.roarFilter)
     this.roarFilter.connect(this.gain)
     this.roarGain.gain.value = 0
@@ -71,15 +80,22 @@ export class FlightAudio {
     this.screamGain.connect(this.gain)
     this.screamGain.gain.value = 0
 
+    // Afterburner / grit bus
+    this.abFilter.type = 'bandpass'
+    this.abFilter.frequency.value = 220
+    this.abFilter.Q.value = 0.6
+    this.abGain.gain.value = 0
+    this.abGain.connect(this.gain)
+
     // Brown-ish noise for jet grit / afterburner rumble
-    const len = Math.floor(this.ctx.sampleRate * 1.5)
+    const len = Math.floor(this.ctx.sampleRate * 2)
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
     const data = buf.getChannelData(0)
     let last = 0
     for (let i = 0; i < len; i++) {
       const white = Math.random() * 2 - 1
-      last = (last + 0.02 * white) / 1.02
-      data[i] = last * 3.5
+      last = (last + 0.018 * white) / 1.018
+      data[i] = last * 4.2
     }
     this.noise = this.ctx.createBufferSource()
     this.noise.buffer = buf
@@ -88,11 +104,29 @@ export class FlightAudio {
     this.noiseGain.gain.value = 0
     this.noiseFilter = this.ctx.createBiquadFilter()
     this.noiseFilter.type = 'lowpass'
-    this.noiseFilter.frequency.value = 180
-    this.noiseFilter.Q.value = 0.7
+    this.noiseFilter.frequency.value = 140
+    this.noiseFilter.Q.value = 0.6
     this.noise.connect(this.noiseFilter)
     this.noiseFilter.connect(this.noiseGain)
     this.noiseGain.connect(this.gain)
+
+    // Second noise for AB crackle (higher band)
+    const buf2 = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
+    const d2 = buf2.getChannelData(0)
+    let last2 = 0
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1
+      last2 = (last2 + 0.05 * white) / 1.05
+      d2[i] = last2 * 2.8 + white * 0.15
+    }
+    this.abNoise = this.ctx.createBufferSource()
+    this.abNoise.buffer = buf2
+    this.abNoise.loop = true
+    this.abNoiseGain = this.ctx.createGain()
+    this.abNoiseGain.gain.value = 0
+    this.abNoise.connect(this.abFilter)
+    this.abFilter.connect(this.abNoiseGain)
+    this.abNoiseGain.connect(this.gain)
 
     this.lfo = this.ctx.createOscillator()
     this.lfo.type = 'square'
@@ -126,10 +160,10 @@ export class FlightAudio {
     } catch {
       /* ok */
     }
-    // Mid scream through bandpass + some through main filter
+    // Mid scream mostly through bandpass; some body through main LP
     this.oscA.connect(this.screamFilter)
-    this.oscB.connect(this.filter)
     this.oscB.connect(this.screamFilter)
+    this.oscB.connect(this.filter)
     this.routedF35 = true
   }
 
@@ -139,15 +173,18 @@ export class FlightAudio {
       !this.oscB ||
       !this.oscC ||
       !this.oscD ||
+      !this.oscE ||
       !this.thumpGain ||
       !this.roarGain ||
       !this.screamGain ||
+      !this.abGain ||
       !this.filter ||
       !this.roarFilter ||
       !this.screamFilter ||
       !this.lfo ||
       !this.lfoGain ||
-      !this.noiseGain
+      !this.noiseGain ||
+      !this.abNoiseGain
     )
       return
     this.bird = bird
@@ -157,14 +194,18 @@ export class FlightAudio {
       this.oscB.type = 'square'
       this.oscC.type = 'sine'
       this.oscD.type = 'sine'
+      this.oscE.type = 'sine'
       this.oscA.frequency.value = 42
       this.oscB.frequency.value = 62
       this.oscC.frequency.value = 24
       this.oscD.frequency.value = 30
+      this.oscE.frequency.value = 40
       this.thumpGain.gain.value = 0.58
       this.roarGain.gain.value = 0
       this.screamGain.gain.value = 0
+      this.abGain.gain.value = 0
       this.noiseGain.gain.value = 0
+      this.abNoiseGain.gain.value = 0
       this.filter.type = 'lowpass'
       this.filter.frequency.value = 260
       this.filter.Q.value = 0.85
@@ -177,31 +218,35 @@ export class FlightAudio {
       this.lfoGain.gain.value = 0.022
     } else {
       if (!this.routedF35) this.routeF35()
-      // Fighter jet: deep roar ~80–180 Hz, mid scream, AB rumble at high THR / CTOL
+      // Fighter jet: chest-rumble roar, restrained scream (not toy/model-plane whine)
       this.oscA.type = 'sawtooth'
-      this.oscB.type = 'sawtooth'
-      this.oscC.type = 'triangle'
+      this.oscB.type = 'triangle'
+      this.oscC.type = 'sine'
       this.oscD.type = 'sawtooth'
-      this.oscA.frequency.value = 320
-      this.oscB.frequency.value = 540
-      this.oscC.frequency.value = 95
-      this.oscD.frequency.value = 95
+      this.oscE.type = 'square'
+      this.oscA.frequency.value = 180
+      this.oscB.frequency.value = 260
+      this.oscC.frequency.value = 55
+      this.oscD.frequency.value = 68
+      this.oscE.frequency.value = 95
       this.thumpGain.gain.value = 0
-      this.roarGain.gain.value = 0.5
-      this.screamGain.gain.value = 0.2
-      this.noiseGain.gain.value = 0.08
+      this.roarGain.gain.value = 0.62
+      this.screamGain.gain.value = 0.1
+      this.abGain.gain.value = 0
+      this.noiseGain.gain.value = 0.12
+      this.abNoiseGain.gain.value = 0
       this.filter.type = 'lowpass'
-      this.filter.frequency.value = 1400
-      this.filter.Q.value = 0.6
+      this.filter.frequency.value = 900
+      this.filter.Q.value = 0.45
       this.roarFilter.type = 'lowpass'
-      this.roarFilter.frequency.value = 160
-      this.roarFilter.Q.value = 0.9
+      this.roarFilter.frequency.value = 130
+      this.roarFilter.Q.value = 0.7
       this.screamFilter.type = 'bandpass'
-      this.screamFilter.frequency.value = 1100
-      this.screamFilter.Q.value = 1.1
+      this.screamFilter.frequency.value = 650
+      this.screamFilter.Q.value = 0.7
       this.lfo.type = 'sine'
-      this.lfo.frequency.value = 0.55
-      this.lfoGain.gain.value = 0.004
+      this.lfo.frequency.value = 0.35
+      this.lfoGain.gain.value = 0.003
     }
   }
 
@@ -213,8 +258,10 @@ export class FlightAudio {
       !this.oscB ||
       !this.oscC ||
       !this.oscD ||
+      !this.oscE ||
       !this.lfo ||
       !this.noise ||
+      !this.abNoise ||
       this.started
     )
       return
@@ -224,15 +271,16 @@ export class FlightAudio {
       this.oscB.start()
       this.oscC.start()
       this.oscD.start()
+      this.oscE.start()
       this.lfo.start()
       this.noise.start()
+      this.abNoise.start()
       this.started = true
     } catch {
       /* already started */
     }
   }
 
-  /** Immediately silence/resume the output bus (no setTarget fade or menu leak). */
   mute(on: boolean) {
     this.muted = on
     if (!this.ctx || !this.masterGain) return
@@ -254,15 +302,19 @@ export class FlightAudio {
       !this.oscB ||
       !this.oscC ||
       !this.oscD ||
+      !this.oscE ||
       !this.gain ||
       !this.thumpGain ||
       !this.roarGain ||
       !this.screamGain ||
+      !this.abGain ||
       !this.filter ||
       !this.roarFilter ||
       !this.screamFilter ||
       !this.noiseGain ||
       !this.noiseFilter ||
+      !this.abNoiseGain ||
+      !this.abFilter ||
       !this.started
     )
       return
@@ -279,7 +331,9 @@ export class FlightAudio {
       this.thumpGain.gain.setTargetAtTime(0.48 + rpm * 0.18, t, 0.12)
       this.roarGain.gain.setTargetAtTime(0, t, 0.1)
       this.screamGain.gain.setTargetAtTime(0, t, 0.1)
+      this.abGain.gain.setTargetAtTime(0, t, 0.1)
       this.noiseGain.gain.setTargetAtTime(0, t, 0.1)
+      this.abNoiseGain.gain.setTargetAtTime(0, t, 0.1)
       this.filter.frequency.setTargetAtTime(190 + rpm * 105 + (1 - hel) * 48, t, 0.1)
       const vol = Math.min(0.105, 0.022 + rpm * 0.055 + tcl * 0.024)
       this.gain.gain.setTargetAtTime(vol, t, 0.08)
@@ -287,40 +341,48 @@ export class FlightAudio {
         this.lfoGain.gain.setTargetAtTime(0.014 + rpm * 0.014 + tcl * 0.004, t, 0.1)
       }
     } else {
-      // vectorPos: 1 = VL fan, 0 = CTOL jet
+      // vectorPos: 1 = VL fan, 0 = CTOL jet — v7: deep roar primary, scream restrained
       const vl = clamp01(modeBlend)
       const ctol = 1 - vl
       const stovl = vl > 0.15 && vl < 0.85 ? 1 : 0
 
-      // Deep roar 80–180 Hz — fighter belly, not mosquito
-      const roarHz = 82 + rpm * 55 + ctol * 40 + tcl * 28
-      this.oscD.frequency.setTargetAtTime(clamp(roarHz, 75, 190), t, 0.07)
-      this.roarFilter.frequency.setTargetAtTime(120 + ctol * 70 + rpm * 40, t, 0.1)
-      this.roarGain.gain.setTargetAtTime(0.28 + ctol * 0.35 + tcl * 0.18 + stovl * 0.08, t, 0.1)
+      // Deep dual-roar 55–140 Hz chest rumble (fighter belly)
+      const roarHz = 58 + rpm * 42 + ctol * 28 + tcl * 22
+      this.oscD.frequency.setTargetAtTime(clamp(roarHz, 52, 145), t, 0.08)
+      this.oscE.frequency.setTargetAtTime(clamp(roarHz * 1.38, 70, 190), t, 0.08)
+      this.roarFilter.frequency.setTargetAtTime(95 + ctol * 55 + rpm * 30 + tcl * 20, t, 0.1)
+      this.roarGain.gain.setTargetAtTime(
+        0.38 + ctol * 0.32 + tcl * 0.22 + stovl * 0.06,
+        t,
+        0.1,
+      )
 
-      // Mid jet scream
-      const scream = 240 + rpm * 220 + ctol * 180 + tcl * 90
-      this.oscA.frequency.setTargetAtTime(scream, t, 0.06)
-      this.oscB.frequency.setTargetAtTime(scream * 1.72, t, 0.06)
-      this.screamFilter.frequency.setTargetAtTime(900 + ctol * 500 + rpm * 250, t, 0.08)
-      this.screamFilter.Q.setTargetAtTime(0.9 + ctol * 0.5, t, 0.1)
-      this.screamGain.gain.setTargetAtTime(0.12 + ctol * 0.2 + tcl * 0.12, t, 0.1)
+      // Mid jet “scream” kept low and warm — no mosquito/model-plane whine
+      const scream = 160 + rpm * 90 + ctol * 70 + tcl * 40
+      this.oscA.frequency.setTargetAtTime(clamp(scream, 140, 420), t, 0.07)
+      this.oscB.frequency.setTargetAtTime(clamp(scream * 1.45, 180, 520), t, 0.07)
+      this.screamFilter.frequency.setTargetAtTime(480 + ctol * 220 + rpm * 120, t, 0.1)
+      this.screamFilter.Q.setTargetAtTime(0.55 + ctol * 0.25, t, 0.1)
+      this.screamGain.gain.setTargetAtTime(0.05 + ctol * 0.1 + tcl * 0.07, t, 0.1)
 
-      // VL/fan residual (higher, thinner)
-      this.oscC.frequency.setTargetAtTime(70 + rpm * 80 + vl * 40, t, 0.08)
-      this.thumpGain.gain.setTargetAtTime(vl * (0.12 + rpm * 0.1), t, 0.12)
+      // VL lift-fan residual — higher but not toy-whine
+      this.oscC.frequency.setTargetAtTime(48 + rpm * 55 + vl * 30, t, 0.08)
+      this.thumpGain.gain.setTargetAtTime(vl * (0.1 + rpm * 0.08), t, 0.12)
 
-      // Afterburner rumble: high THR + vector low (CTOL)
-      const ab = clamp01((tcl - 0.55) / 0.45) * clamp01((0.35 - vl) / 0.35)
-      this.noiseFilter.frequency.setTargetAtTime(140 + ctol * 80 + ab * 120, t, 0.1)
-      this.noiseGain.gain.setTargetAtTime(0.04 + ctol * 0.07 + ab * 0.1 + tcl * 0.03, t, 0.1)
+      // Afterburner: high THR + vector low (CTOL)
+      const ab = clamp01((tcl - 0.58) / 0.42) * clamp01((0.32 - vl) / 0.32)
+      this.noiseFilter.frequency.setTargetAtTime(110 + ctol * 60 + ab * 90, t, 0.1)
+      this.noiseGain.gain.setTargetAtTime(0.07 + ctol * 0.1 + ab * 0.12 + tcl * 0.04, t, 0.1)
+      this.abFilter.frequency.setTargetAtTime(200 + ab * 180 + ctol * 80, t, 0.1)
+      this.abNoiseGain.gain.setTargetAtTime(ab * (0.06 + tcl * 0.05), t, 0.12)
+      this.abGain.gain.setTargetAtTime(ab * 0.08, t, 0.12)
 
-      this.filter.frequency.setTargetAtTime(700 + rpm * 400 + ctol * 500, t, 0.08)
-      this.filter.Q.setTargetAtTime(0.5 + ctol * 0.4, t, 0.1)
+      this.filter.frequency.setTargetAtTime(480 + rpm * 280 + ctol * 320, t, 0.09)
+      this.filter.Q.setTargetAtTime(0.4 + ctol * 0.25, t, 0.1)
 
-      const vol = Math.min(0.12, 0.028 + rpm * 0.04 + tcl * 0.04 + ctol * 0.018)
+      const vol = Math.min(0.135, 0.032 + rpm * 0.038 + tcl * 0.045 + ctol * 0.022)
       this.gain.gain.setTargetAtTime(vol, t, 0.09)
-      if (this.lfoGain) this.lfoGain.gain.setTargetAtTime(0.002 + ab * 0.006, t, 0.15)
+      if (this.lfoGain) this.lfoGain.gain.setTargetAtTime(0.0015 + ab * 0.005, t, 0.15)
     }
   }
 

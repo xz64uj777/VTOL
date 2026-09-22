@@ -1,5 +1,5 @@
 import { F35_GEAR_H, F35_HOVER_THR, GEAR_H, HOVER_TCL, type QualityKey } from './config'
-import { createCam, nextCam, updateCamera } from './camera'
+import { createCam, nextCam, resetCamOffsets, updateCamera } from './camera'
 import {
   createCraft,
   hardLanding,
@@ -71,6 +71,12 @@ export function resetToHangar(sim: Sim): void {
 
 export function cycleCamera(sim: Sim): void {
   sim.camMode = nextCam(sim.camMode)
+  resetCamOffsets(sim.cam)
+}
+
+/** Double-tap / Cam double-tap: reset view offsets for current mode. */
+export function resetCameraView(sim: Sim): void {
+  resetCamOffsets(sim.cam)
 }
 
 export function setQuality(sim: Sim, q: QualityKey): void {
@@ -225,13 +231,17 @@ export function hudFrom(sim: Sim): Hud {
     const a = (finiteOr(c.aoa, 0) * 180) / Math.PI
     return Number.isFinite(a) ? clampHud(a, -90, 90) : 0
   })()
+  const vs = Number.isFinite(c.vy) ? c.vy : 0
   return {
     alt: Number.isFinite(alt) ? alt : 0,
     fl: Number.isFinite(altFt) ? Math.max(0, Math.round(altFt / 100)) : 0,
     speed: Number.isFinite(spd) ? clampHud(spd, 0, 999) : 0,
+    vs: clampHud(vs, -99, 99),
     hdg: Number.isFinite(c.yaw) ? headingDeg(c.yaw) : 0,
     nacelleDeg: Number.isFinite(c.nacelleDeg) ? clampHud(c.nacelleDeg, 0, 90) : 0,
+    vectorPos: Number.isFinite(c.vectorPos) ? clampHud(c.vectorPos, 0, 1) : 0,
     aoaDeg,
+    rpm: Number.isFinite(c.rotorRpm) ? clampHud(c.rotorRpm, 0, 1) : 0,
     mode: modeFromCraft(c),
     bird: c.kind,
     tcl: Number.isFinite(sim.controls.tcl) ? sim.controls.tcl : 0,
@@ -239,6 +249,8 @@ export function hudFrom(sim: Sim): Hud {
     cam: sim.camMode,
     quality: sim.quality,
     envelopeWarn: sim.envelopeWarn,
+    gearDown: c.gearDown,
+    flaps: Number.isFinite(c.flaps) ? clampHud(c.flaps, 0, 1) : 0,
   }
 }
 

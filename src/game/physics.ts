@@ -53,6 +53,10 @@ import {
   SETTLE,
   WING_AREA,
   YAW_RATE,
+  SPAWN_F35_X,
+  SPAWN_F35_Z,
+  SPAWN_OSP_X,
+  SPAWN_OSP_Z,
 } from './config'
 import type { BirdKind, Controls, Craft, Experience, F35Mode, FlightMode, OspreyMode } from './types'
 
@@ -93,11 +97,12 @@ export function modeFromCraft(c: Craft): FlightMode {
 
 export function createCraft(kind: BirdKind = 'osprey'): Craft {
   const gearH = kind === 'f35' ? F35_GEAR_H : GEAR_H
+  const onPad = kind === 'osprey'
   return {
     kind,
-    x: 0,
+    x: onPad ? SPAWN_OSP_X : SPAWN_F35_X,
     y: gearH,
-    z: 0,
+    z: onPad ? SPAWN_OSP_Z : SPAWN_F35_Z,
     vx: 0,
     vy: 0,
     vz: 0,
@@ -118,6 +123,8 @@ export function createCraft(kind: BirdKind = 'osprey'): Craft {
     electricsOn: true,
     failAsymmetric: false,
     failHyd: false,
+    parkingBrake: true,
+    lightsOn: false,
   }
 }
 

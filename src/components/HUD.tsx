@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { CAM_LABEL } from '../game/camera'
 import type { Hud } from '../game/types'
 
 export type LevelReading = {
@@ -21,7 +22,6 @@ const FL_SHOW_M = 305
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
-
 
 function fmtNum(v: number, digits = 0): string {
   if (!Number.isFinite(v)) return '---'
@@ -73,6 +73,7 @@ export function HUD({ hud, message, paused, level }: Props) {
         : 'mode-apl'
 
   const showFl = hud.alt >= FL_SHOW_M
+  const camLabel = CAM_LABEL[hud.cam] ?? hud.cam.toUpperCase()
 
   return (
     <div className="hud">
@@ -119,7 +120,7 @@ export function HUD({ hud, message, paused, level }: Props) {
       <div className="hud-instruments">
         <LevelGauge reading={level} />
         <div className="hud-cam">
-          {hud.bird === 'f35' ? 'F-35' : 'OSPREY'} · {hud.cam.toUpperCase()}
+          {hud.bird === 'f35' ? 'F-35' : 'OSPREY'} · {camLabel}
         </div>
       </div>
     </div>

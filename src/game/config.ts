@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v4 — tunables. */
+/** Osprey / F-35 Flight v7 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -68,9 +68,20 @@ export const F35_CONV_WING_SPEED = 52
 export const F35_CONV_BRIDGE = 0.68
 export const F35_DRAG_H = 0.14
 
-export const PAD_X = 0
-export const PAD_Z = 0
+export const PAD_X = -42
+export const PAD_Z = 18
 export const PAD_R = 22
+
+/** Runway: centerline along +Z, threshold near z=0, heading ~0° (north). */
+export const RWY_X = 0
+export const RWY_Z0 = -90
+export const RWY_Z1 = 140
+export const RWY_HALF_W = 12
+/** F-35 spawn at threshold; Osprey on VTOL pad beside runway. */
+export const SPAWN_F35_X = 0
+export const SPAWN_F35_Z = -70
+export const SPAWN_OSP_X = PAD_X
+export const SPAWN_OSP_Z = PAD_Z
 
 /** Legacy alias used by Osprey physics. */
 export const MASS = OSP_MASS

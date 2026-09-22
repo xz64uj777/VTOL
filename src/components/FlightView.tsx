@@ -28,11 +28,13 @@ import {
   createSim,
   cycleCamera,
   hudFrom,
+  resetCameraView,
   resetToHangar,
   startFlight,
   stepSim,
 } from '../game/sim'
 import type { BirdKind, Experience, SystemsPanel } from '../game/types'
+import { DeckPanel } from './DeckPanel'
 import { HUD, type LevelReading } from './HUD'
 import { SystemsMenu } from './SystemsMenu'
 import { VirtualControls } from './VirtualControls'
@@ -92,6 +94,14 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const showSettingsRef = useRef(false)
   const [tick, setTick] = useState(0)
   const bump = useCallback(() => setTick((t) => t + 1), [])
+  const [deckOpen, setDeckOpen] = useState(experience !== 'casual')
+  const camTouchRef = useRef<{
+    id: number | null
+    x: number
+    y: number
+    moved: boolean
+    lastTap: number
+  }>({ id: null, x: 0, y: 0, moved: false, lastTap: 0 })
 
   const patchPrefs = useCallback((partial: Partial<FlightPrefs>) => {
     setPrefs((p) => {
@@ -123,6 +133,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     prefsRef.current.experience = experience
     simRef.current.experience = experience
     simRef.current.quality = quality
+    setDeckOpen(experience !== 'casual')
   }, [experience, quality])
 
   useEffect(() => {
@@ -360,6 +371,71 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     return () => window.clearInterval(id)
   }, [prefs.tiltCyclic, patchPrefs])
 
+
+  // Touch drag on empty sky/canvas pans chase offset; double-tap resets view.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const onStart = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      // Only primary finger on canvas (not sticks — they stopPropagation)
+      if (camTouchRef.current.id !== null) return
+      camTouchRef.current = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        moved: false,
+        lastTap: camTouchRef.current.lastTap,
+      }
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {
+        /* ok */
+      }
+    }
+    const onMove = (e: PointerEvent) => {
+      const t = camTouchRef.current
+      if (t.id !== e.pointerId) return
+      const dx = e.clientX - t.x
+      const dy = e.clientY - t.y
+      if (Math.hypot(dx, dy) > 6) t.moved = true
+      t.x = e.clientX
+      t.y = e.clientY
+      const cam = simRef.current.cam
+      // Drag right → orbit left (look around craft)
+      cam.yawOff = (cam.yawOff || 0) - dx * 0.0045
+      cam.pitchOff = Math.max(-0.55, Math.min(0.45, (cam.pitchOff || 0) + dy * 0.0032))
+    }
+    const onEnd = (e: PointerEvent) => {
+      const t = camTouchRef.current
+      if (t.id !== e.pointerId) return
+      const now = performance.now()
+      if (!t.moved && now - t.lastTap < 320) {
+        resetCameraView(simRef.current)
+        t.lastTap = 0
+      } else if (!t.moved) {
+        t.lastTap = now
+      }
+      t.id = null
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ok */
+      }
+    }
+    canvas.addEventListener('pointerdown', onStart)
+    canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerup', onEnd)
+    canvas.addEventListener('pointercancel', onEnd)
+    return () => {
+      canvas.removeEventListener('pointerdown', onStart)
+      canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerup', onEnd)
+      canvas.removeEventListener('pointercancel', onEnd)
+    }
+  }, [experience, bird, quality])
+
   const goHangar = () => {
     audioRef.current.mute(true)
     resetToHangar(simRef.current)
@@ -501,7 +577,23 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             Cal
           </button>
         )}
-        <button type="button" className="deck-btn" onClick={() => cycleCamera(simRef.current)}>
+        <button
+          type="button"
+          className="deck-btn"
+          onClick={(e) => {
+            const now = performance.now()
+            const last = (e.currentTarget as HTMLButtonElement & { _lastTap?: number })._lastTap ?? 0
+            if (now - last < 320) {
+              resetCameraView(simRef.current)
+              ;(e.currentTarget as HTMLButtonElement & { _lastTap?: number })._lastTap = 0
+            } else {
+              cycleCamera(simRef.current)
+              bump()
+              ;(e.currentTarget as HTMLButtonElement & { _lastTap?: number })._lastTap = now
+            }
+          }}
+          title="Tap: next view · Double-tap: reset"
+        >
           Cam
         </button>
         <button type="button" className="deck-btn" onClick={() => setPaused((p) => !p)}>
@@ -597,6 +689,14 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           </button>
         </div>
       )}
+
+      <DeckPanel
+        sim={simRef.current}
+        hud={hud}
+        visible={deckOpen}
+        onToggle={() => setDeckOpen((v) => !v)}
+        bump={bump}
+      />
 
       <VirtualControls
         input={inputRef.current}
