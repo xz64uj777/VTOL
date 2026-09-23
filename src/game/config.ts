@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v8 — tunables. */
+/** Osprey / F-35 Flight v9 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -67,6 +67,15 @@ export const F35_YAW_RATE = 0.7
 export const F35_CONV_WING_SPEED = 52
 export const F35_CONV_BRIDGE = 0.68
 export const F35_DRAG_H = 0.14
+/**
+ * F-35 CTOL ground is jet-specific (hard pin + critical damp) — NOT the Osprey
+ * hover plantGear spring. Do not share bounce/WOW logic between birds.
+ */
+export const F35_CTOL_ROTATE_SPEED = 38
+export const F35_CTOL_ROTATE_PITCH = 0.12
+export const F35_CTOL_ROTATE_THR = 0.55
+/** Leave-ground hysteresis: must clear this AGL before WOW can re-latch. */
+export const F35_CTOL_AIR_HYST = 1.4
 
 export const PAD_X = -42
 export const PAD_Z = 18
@@ -87,10 +96,44 @@ export const SPAWN_OSP_Z = PAD_Z
 export const MASS = OSP_MASS
 export const MAX_THRUST = OSP_MAX_THRUST
 
+/**
+ * Quality tiers — v9: farLOD massing + altitude-scaled draw.
+ * Near trees trimmed on med for phone; far patches keep countryside at altitude.
+ */
 export const QUALITY = {
-  low: { trees: 28, buildings: 8, particles: 0, shadows: false, groundDetail: 10 },
-  med: { trees: 64, buildings: 14, particles: 22, shadows: true, groundDetail: 18 },
-  high: { trees: 90, buildings: 22, particles: 44, shadows: true, groundDetail: 26 },
+  low: {
+    trees: 18,
+    buildings: 6,
+    particles: 0,
+    shadows: false,
+    groundDetail: 8,
+    farPatches: 10,
+    farRidges: 3,
+  },
+  med: {
+    trees: 48,
+    buildings: 12,
+    particles: 18,
+    shadows: true,
+    groundDetail: 16,
+    farPatches: 16,
+    farRidges: 4,
+  },
+  high: {
+    trees: 72,
+    buildings: 20,
+    particles: 40,
+    shadows: true,
+    groundDetail: 24,
+    farPatches: 22,
+    farRidges: 5,
+  },
 } as const
 
 export type QualityKey = keyof typeof QUALITY
+
+/** Ground / scenery draw radii (m) — scaled further by altitude in render. */
+export const SCENERY_NEAR_M = 280
+export const SCENERY_FAR_M = 2200
+export const SCENERY_HORIZON_BASE = 900
+export const SCENERY_HORIZON_PER_ALT = 4.5

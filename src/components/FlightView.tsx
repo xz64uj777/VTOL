@@ -601,9 +601,6 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         <button type="button" className="deck-btn" onClick={() => setPaused((p) => !p)}>
           {paused ? 'Resume' : 'Pause'}
         </button>
-        <button type="button" className="deck-btn" onClick={goHangar}>
-          Hangar
-        </button>
       </div>
 
       {showSettings && (
@@ -668,6 +665,18 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             tap Resume. Tilt ON hides left CYC stick. Laptops have no gyro — use a phone for Tilt.
           </p>
           {tiltSticky && <p className="settings-hint tilt-sticky-hint">{tiltSticky}</p>}
+          <div className="settings-row">
+            <span>Leave sortie</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Return to Hangar? Sortie will restart.')) goHangar()
+              }}
+            >
+              Hangar…
+            </button>
+          </div>
+          <p className="settings-hint">Hangar ends the sortie — Pause/Resume stays on the flight bar.</p>
           <button type="button" className="settings-close" onClick={() => setShowSettings(false)}>
             Close
           </button>

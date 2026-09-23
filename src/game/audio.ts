@@ -321,68 +321,85 @@ export class FlightAudio {
     if (bird !== this.bird) this.applyBirdTimbre(bird)
 
     const t = this.ctx.currentTime
+    // v9: sanitize inputs — freeze modulation when extreme; never NaN into AudioParam
+    const rpmSafe = Number.isFinite(rpm) ? clamp(rpm, 0, 1.25) : 0
+    const tclSafe = Number.isFinite(tcl) ? clamp(tcl, 0, 1.25) : 0
+    const blendSafe = Number.isFinite(modeBlend) ? modeBlend : 0
+    const soft = rpmSafe > 1.05 || tclSafe > 1.05 // soften when values go extreme
+
+    const setHz = (param: AudioParam, hz: number, tau = 0.08) => {
+      const v = clamp(Number.isFinite(hz) ? hz : 60, 20, 12000)
+      param.setTargetAtTime(v, t, tau)
+    }
+    const setG = (param: AudioParam, g: number, tau = 0.1) => {
+      const v = clamp(Number.isFinite(g) ? g : 0, 0, 0.95)
+      param.setTargetAtTime(v, t, tau)
+    }
+    const setQ = (param: AudioParam, q: number, tau = 0.1) => {
+      const v = clamp(Number.isFinite(q) ? q : 0.5, 0.1, 8)
+      param.setTargetAtTime(v, t, tau)
+    }
+
     if (bird === 'osprey') {
-      const hel = Math.sin((modeBlend * Math.PI) / 180)
-      const base = 36 + rpm * 56
+      const hel = Math.sin((clamp(blendSafe, 0, 90) * Math.PI) / 180)
+      const base = 36 + rpmSafe * 56
       const aplLift = (1 - hel) * 22
-      this.oscA.frequency.setTargetAtTime(base + aplLift, t, 0.08)
-      this.oscB.frequency.setTargetAtTime(base * 1.48 + aplLift * 0.65, t, 0.08)
-      this.oscC.frequency.setTargetAtTime(base * 0.52, t, 0.1)
-      this.thumpGain.gain.setTargetAtTime(0.48 + rpm * 0.18, t, 0.12)
-      this.roarGain.gain.setTargetAtTime(0, t, 0.1)
-      this.screamGain.gain.setTargetAtTime(0, t, 0.1)
-      this.abGain.gain.setTargetAtTime(0, t, 0.1)
-      this.noiseGain.gain.setTargetAtTime(0, t, 0.1)
-      this.abNoiseGain.gain.setTargetAtTime(0, t, 0.1)
-      this.filter.frequency.setTargetAtTime(190 + rpm * 105 + (1 - hel) * 48, t, 0.1)
-      const vol = Math.min(0.105, 0.022 + rpm * 0.055 + tcl * 0.024)
-      this.gain.gain.setTargetAtTime(vol, t, 0.08)
+      setHz(this.oscA.frequency, base + aplLift)
+      setHz(this.oscB.frequency, base * 1.48 + aplLift * 0.65)
+      setHz(this.oscC.frequency, base * 0.52, 0.1)
+      setG(this.thumpGain.gain, 0.48 + rpmSafe * 0.18, 0.12)
+      setG(this.roarGain.gain, 0)
+      setG(this.screamGain.gain, 0)
+      setG(this.abGain.gain, 0)
+      setG(this.noiseGain.gain, 0)
+      setG(this.abNoiseGain.gain, 0)
+      setHz(this.filter.frequency, clamp(190 + rpmSafe * 105 + (1 - hel) * 48, 80, 900), 0.1)
+      // Master vol capped so LFO cannot drive into clipping/static
+      const vol = Math.min(soft ? 0.08 : 0.095, 0.02 + rpmSafe * 0.05 + tclSafe * 0.022)
+      setG(this.gain.gain, vol, 0.08)
       if (this.lfoGain) {
-        this.lfoGain.gain.setTargetAtTime(0.014 + rpm * 0.014 + tcl * 0.004, t, 0.1)
+        // Keep LFO depth << master so sum stays well under 1 (no static-ish clip)
+        const lfo = soft ? 0.006 : clamp(0.01 + rpmSafe * 0.01 + tclSafe * 0.003, 0, 0.018)
+        setG(this.lfoGain.gain, Math.min(lfo, vol * 0.22), 0.1)
       }
     } else {
-      // vectorPos: 1 = VL fan, 0 = CTOL jet — v7: deep roar primary, scream restrained
-      const vl = clamp01(modeBlend)
+      // F-35 jet roar — distinct from Osprey slap; v9 clamps prevent altitude static
+      const vl = clamp01(blendSafe)
       const ctol = 1 - vl
       const stovl = vl > 0.15 && vl < 0.85 ? 1 : 0
 
-      // Deep dual-roar 55–140 Hz chest rumble (fighter belly)
-      const roarHz = 58 + rpm * 42 + ctol * 28 + tcl * 22
-      this.oscD.frequency.setTargetAtTime(clamp(roarHz, 52, 145), t, 0.08)
-      this.oscE.frequency.setTargetAtTime(clamp(roarHz * 1.38, 70, 190), t, 0.08)
-      this.roarFilter.frequency.setTargetAtTime(95 + ctol * 55 + rpm * 30 + tcl * 20, t, 0.1)
-      this.roarGain.gain.setTargetAtTime(
-        0.38 + ctol * 0.32 + tcl * 0.22 + stovl * 0.06,
-        t,
-        0.1,
-      )
+      const roarHz = 58 + rpmSafe * 42 + ctol * 28 + tclSafe * 22
+      setHz(this.oscD.frequency, clamp(roarHz, 52, 145))
+      setHz(this.oscE.frequency, clamp(roarHz * 1.38, 70, 190))
+      setHz(this.roarFilter.frequency, clamp(95 + ctol * 55 + rpmSafe * 30 + tclSafe * 20, 60, 400), 0.1)
+      setG(this.roarGain.gain, clamp(0.38 + ctol * 0.28 + tclSafe * 0.18 + stovl * 0.05, 0, 0.85))
 
-      // Mid jet “scream” kept low and warm — no mosquito/model-plane whine
-      const scream = 160 + rpm * 90 + ctol * 70 + tcl * 40
-      this.oscA.frequency.setTargetAtTime(clamp(scream, 140, 420), t, 0.07)
-      this.oscB.frequency.setTargetAtTime(clamp(scream * 1.45, 180, 520), t, 0.07)
-      this.screamFilter.frequency.setTargetAtTime(480 + ctol * 220 + rpm * 120, t, 0.1)
-      this.screamFilter.Q.setTargetAtTime(0.55 + ctol * 0.25, t, 0.1)
-      this.screamGain.gain.setTargetAtTime(0.05 + ctol * 0.1 + tcl * 0.07, t, 0.1)
+      const scream = 160 + rpmSafe * 90 + ctol * 70 + tclSafe * 40
+      setHz(this.oscA.frequency, clamp(scream, 140, 420), 0.07)
+      setHz(this.oscB.frequency, clamp(scream * 1.45, 180, 520), 0.07)
+      setHz(this.screamFilter.frequency, clamp(480 + ctol * 220 + rpmSafe * 120, 200, 1800), 0.1)
+      setQ(this.screamFilter.Q, 0.55 + ctol * 0.25)
+      setG(this.screamGain.gain, 0.05 + ctol * 0.09 + tclSafe * 0.06)
 
-      // VL lift-fan residual — higher but not toy-whine
-      this.oscC.frequency.setTargetAtTime(48 + rpm * 55 + vl * 30, t, 0.08)
-      this.thumpGain.gain.setTargetAtTime(vl * (0.1 + rpm * 0.08), t, 0.12)
+      setHz(this.oscC.frequency, 48 + rpmSafe * 55 + vl * 30)
+      setG(this.thumpGain.gain, vl * (0.1 + rpmSafe * 0.08), 0.12)
 
-      // Afterburner: high THR + vector low (CTOL)
-      const ab = clamp01((tcl - 0.58) / 0.42) * clamp01((0.32 - vl) / 0.32)
-      this.noiseFilter.frequency.setTargetAtTime(110 + ctol * 60 + ab * 90, t, 0.1)
-      this.noiseGain.gain.setTargetAtTime(0.07 + ctol * 0.1 + ab * 0.12 + tcl * 0.04, t, 0.1)
-      this.abFilter.frequency.setTargetAtTime(200 + ab * 180 + ctol * 80, t, 0.1)
-      this.abNoiseGain.gain.setTargetAtTime(ab * (0.06 + tcl * 0.05), t, 0.12)
-      this.abGain.gain.setTargetAtTime(ab * 0.08, t, 0.12)
+      const ab = clamp01((tclSafe - 0.58) / 0.42) * clamp01((0.32 - vl) / 0.32)
+      setHz(this.noiseFilter.frequency, clamp(110 + ctol * 60 + ab * 90, 60, 800), 0.1)
+      setG(this.noiseGain.gain, 0.07 + ctol * 0.09 + ab * 0.1 + tclSafe * 0.035)
+      setHz(this.abFilter.frequency, clamp(200 + ab * 180 + ctol * 80, 80, 1200), 0.1)
+      setG(this.abNoiseGain.gain, ab * (0.05 + tclSafe * 0.04), 0.12)
+      setG(this.abGain.gain, ab * 0.07, 0.12)
 
-      this.filter.frequency.setTargetAtTime(480 + rpm * 280 + ctol * 320, t, 0.09)
-      this.filter.Q.setTargetAtTime(0.4 + ctol * 0.25, t, 0.1)
+      setHz(this.filter.frequency, clamp(480 + rpmSafe * 280 + ctol * 320, 200, 2400), 0.09)
+      setQ(this.filter.Q, 0.4 + ctol * 0.25)
 
-      const vol = Math.min(0.135, 0.032 + rpm * 0.038 + tcl * 0.045 + ctol * 0.022)
-      this.gain.gain.setTargetAtTime(vol, t, 0.09)
-      if (this.lfoGain) this.lfoGain.gain.setTargetAtTime(0.0015 + ab * 0.005, t, 0.15)
+      const vol = Math.min(soft ? 0.1 : 0.12, 0.03 + rpmSafe * 0.035 + tclSafe * 0.04 + ctol * 0.02)
+      setG(this.gain.gain, vol, 0.09)
+      if (this.lfoGain) {
+        const lfo = soft ? 0.001 : clamp(0.0012 + ab * 0.004, 0, 0.006)
+        setG(this.lfoGain.gain, Math.min(lfo, vol * 0.15), 0.15)
+      }
     }
   }
 

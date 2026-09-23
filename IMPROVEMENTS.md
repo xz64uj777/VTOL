@@ -1,5 +1,15 @@
 # Osprey Flight — IMPROVEMENTS
 
+## v9 (2026-09-22 evening)
+
+### Far scenery · audio static · cam above-behind · F-35 hop · Hangar chrome
+
+- **Far scenery (HARD):** altitude-scaled horizon + following ground grid; craft-following field tiles + trees; far LOD land massing / ridges / clouds so 1000–5000+ ft AGL still shows structure; med trims near trees, denser far patches.
+- **Audio:** clamp oscillator Hz + filter params to audible ranges; LFO depth capped so master never clips into static; soften/freeze when rpm/tcl extreme; never NaN into AudioParam; Osprey slap vs F-35 jet kept distinct.
+- **Camera:** chase clamp `y ≥ craft + min` and look pitch so view never from under belly; altitude damps pitch/roll coupling; v6/v7 craft-in-view tether; less jitter; touch offsets + double-tap reset kept.
+- **F-35 CTOL ground (jet-specific):** hard pin + critical vertical damp; no Osprey `plantGear` spring fight on CTOL; leave-ground only on clear rotate (speed+pitch+thrust) with air hysteresis; smooth low-speed taxi.
+- **Hangar chrome:** removed from far-right flight deck (was next to Resume); Settings Hangar… with confirm; crash banner Hangar kept.
+
 ## v8 (2026-09-22)
 
 ### CTOL taxi · runway cull · cold start · terrain
@@ -10,7 +20,6 @@
 - **Terrain:** fields, distant ridges/coast cue, road arc, extra taxi/ramp, denser trees/scrub; runway stays landmark.
 
 ## v7 (2026-09-22)
-
 
 ### Realism slice — cam / audio / deck / airport
 
@@ -38,16 +47,3 @@
 ## v4
 
 - Convert lift bridge (Osprey + F-35), pitch authority floor through CONV, lower DRAG_H
-- Distinct Osprey vs F-35 WebAudio timbres
-
-## v3
-
-- Settings/Systems pause (close ≠ resume), Casual pitch default, yaw bar L, hide stick on Tilt
-- Sticky cal zeros after Cal
-
-## Softs parked
-
-- F-35 AOA HUD noise in VL
-- Envelope tips overwrite hover tips
-- Synth not recorded samples
-- Park/lights stubs; simple airport scenery

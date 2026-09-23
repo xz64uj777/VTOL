@@ -8,6 +8,10 @@ import {
   RWY_X,
   RWY_Z0,
   RWY_Z1,
+  SCENERY_FAR_M,
+  SCENERY_HORIZON_BASE,
+  SCENERY_HORIZON_PER_ALT,
+  SCENERY_NEAR_M,
 } from './config'
 import { clamp } from './physics'
 import type { Cam, Craft, Sim } from './types'
@@ -82,8 +86,9 @@ export class Renderer {
     this.rotorPhase += dt * (7 + sim.craft.rotorRpm * 38)
     this.sky(ctx, w, h, sim.craft.y)
     this.ground(ctx, sim, w, h, q.groundDetail)
-    this.distantTerrain(ctx, sim.cam, w, h)
-    this.fields(ctx, sim.cam, w, h)
+    this.distantTerrain(ctx, sim.cam, w, h, q.farRidges, sim.craft.y)
+    this.fields(ctx, sim.cam, w, h, q.farPatches, sim.craft.y)
+    this.farMassing(ctx, sim.cam, w, h, q.farPatches, sim.craft.y)
     // Airport before foggy props so strip stays the landmark
     this.airport(ctx, sim.cam, w, h)
     this.pad(ctx, sim.cam, w, h)
@@ -107,50 +112,61 @@ export class Renderer {
 
   private ground(ctx: CanvasRenderingContext2D, sim: Sim, w: number, h: number, detail: number) {
     const cam = sim.cam
+    const alt = Math.max(0, sim.craft.y)
+    // Horizon distance grows with altitude so 1000–5000 ft still shows structure
+    const horizDist = SCENERY_HORIZON_BASE + alt * SCENERY_HORIZON_PER_ALT
     const horizon = project(
-      { x: cam.x + Math.sin(cam.yaw) * 800, y: 0, z: cam.z + Math.cos(cam.yaw) * 800 },
+      { x: cam.x + Math.sin(cam.yaw) * horizDist, y: 0, z: cam.z + Math.cos(cam.yaw) * horizDist },
       cam,
       w,
       h,
     )
-    const hy = horizon ? clamp(horizon.y, h * 0.25, h * 0.75) : h * 0.55
-    const g = ctx.createLinearGradient(0, hy, 0, h)
-    g.addColorStop(0, '#4e6e42')
+    const hy = horizon ? clamp(horizon.y, h * 0.18, h * 0.72) : h * 0.55
+    // Atmospheric haze band toward horizon
+    const g = ctx.createLinearGradient(0, hy - h * 0.08, 0, h)
+    const haze = clamp(alt / 900, 0, 0.55)
+    g.addColorStop(0, mix('#6a8a6a', '#a8b8c0', haze * 0.55))
+    g.addColorStop(0.35, mix('#4e6e42', '#7a8a70', haze * 0.25))
     g.addColorStop(1, '#324828')
     ctx.fillStyle = g
-    ctx.fillRect(0, hy, w, h - hy)
+    ctx.fillRect(0, Math.max(0, hy - h * 0.08), w, h - Math.max(0, hy - h * 0.08))
 
     ctx.save()
     ctx.beginPath()
     ctx.rect(0, hy, w, h - hy)
     ctx.clip()
-    const step = Math.max(6, 36 - detail)
-    for (let i = -detail; i <= detail; i++) {
-      const z0 = cam.z + Math.cos(cam.yaw) * (16 + i * step)
-      const x0 = cam.x + Math.sin(cam.yaw) * (16 + i * step)
-      const a = project({ x: x0 - 110, y: 0, z: z0 - 110 }, cam, w, h)
-      const b = project({ x: x0 + 110, y: 0, z: z0 + 110 }, cam, w, h)
+    // Tile size & span scale with altitude — countryside follows craft, not a tiny static field
+    const span = SCENERY_NEAR_M + alt * 2.8
+    const step = Math.max(14, (span / Math.max(6, detail)) * (1 + alt / 600))
+    const tiles = Math.max(detail, Math.floor(span / step))
+    for (let i = -tiles; i <= tiles; i++) {
+      const z0 = cam.z + Math.cos(cam.yaw) * (20 + i * step)
+      const x0 = cam.x + Math.sin(cam.yaw) * (20 + i * step)
+      const half = step * 1.6 + alt * 0.15
+      const a = project({ x: x0 - half, y: 0, z: z0 - half }, cam, w, h)
+      const b = project({ x: x0 + half, y: 0, z: z0 + half }, cam, w, h)
       if (!a || !b) continue
-      ctx.strokeStyle = `rgba(35,55,28,${0.14 + 0.12 * (1 - Math.abs(i) / detail)})`
+      const fade = 0.1 + 0.1 * (1 - Math.abs(i) / tiles)
+      ctx.strokeStyle = `rgba(35,55,28,${fade})`
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
       ctx.lineTo(b.x, b.y)
       ctx.stroke()
     }
-    // Cross-hatch for height/motion readability
-    for (let i = -detail; i <= detail; i += 2) {
-      const lat = (i * step) * 0.85
+    for (let i = -tiles; i <= tiles; i += 2) {
+      const lat = i * step * 0.85
       const fx = -Math.sin(cam.yaw)
       const fz = Math.cos(cam.yaw)
       const rx = Math.cos(cam.yaw)
       const rz = Math.sin(cam.yaw)
-      const cx = cam.x + fx * 40 + rx * lat
-      const cz = cam.z + fz * 40 + rz * lat
-      const a = project({ x: cx - fx * 100, y: 0, z: cz - fz * 100 }, cam, w, h)
-      const b = project({ x: cx + fx * 100, y: 0, z: cz + fz * 100 }, cam, w, h)
+      const reach = 80 + alt * 0.9
+      const cx = cam.x + fx * 50 + rx * lat
+      const cz = cam.z + fz * 50 + rz * lat
+      const a = project({ x: cx - fx * reach, y: 0, z: cz - fz * reach }, cam, w, h)
+      const b = project({ x: cx + fx * reach, y: 0, z: cz + fz * reach }, cam, w, h)
       if (!a || !b) continue
-      ctx.strokeStyle = `rgba(30,50,25,${0.08 + 0.08 * (1 - Math.abs(i) / detail)})`
+      ctx.strokeStyle = `rgba(30,50,25,${0.06 + 0.07 * (1 - Math.abs(i) / tiles)})`
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
       ctx.lineTo(b.x, b.y)
@@ -440,17 +456,28 @@ export class Renderer {
     }
   }
 
-  /** Distant ridges / coastline silhouette — phone-cheap depth cue. */
-  private distantTerrain(ctx: CanvasRenderingContext2D, cam: Cam, w: number, h: number) {
+  /** Distant ridges / coastline — scales with altitude so 1k–5k ft still has horizon structure. */
+  private distantTerrain(
+    ctx: CanvasRenderingContext2D,
+    cam: Cam,
+    w: number,
+    h: number,
+    ridgeCount: number,
+    alt: number,
+  ) {
+    const altBoost = 1 + alt / 350
     const ridges: { dist: number; hgt: number; amp: number; color: string }[] = [
-      { dist: 420, hgt: 38, amp: 22, color: 'rgba(55,72,48,0.55)' },
-      { dist: 520, hgt: 55, amp: 30, color: 'rgba(48,62,42,0.45)' },
-      { dist: 640, hgt: 28, amp: 16, color: 'rgba(42,58,70,0.4)' }, // coast-ish
-    ]
+      { dist: 480 * altBoost, hgt: 42 + alt * 0.04, amp: 26, color: 'rgba(55,72,48,0.55)' },
+      { dist: 720 * altBoost, hgt: 70 + alt * 0.06, amp: 38, color: 'rgba(48,62,42,0.48)' },
+      { dist: 1100 * altBoost, hgt: 95 + alt * 0.08, amp: 48, color: 'rgba(42,55,40,0.4)' },
+      { dist: 1600 * altBoost, hgt: 55 + alt * 0.05, amp: 28, color: 'rgba(42,58,70,0.38)' },
+      { dist: 2100 * altBoost, hgt: 120 + alt * 0.1, amp: 55, color: 'rgba(38,48,58,0.32)' },
+    ].slice(0, Math.max(3, ridgeCount))
     for (const ridge of ridges) {
       const pts: Vec2[] = []
-      for (let i = -14; i <= 14; i++) {
-        const lat = i * 38
+      const steps = 18 + Math.floor(alt / 200)
+      for (let i = -steps; i <= steps; i++) {
+        const lat = i * (42 + alt * 0.08)
         const ang = cam.yaw
         const fx = Math.sin(ang)
         const fz = Math.cos(ang)
@@ -460,8 +487,8 @@ export class Renderer {
         const wz = cam.z + fz * ridge.dist + rz * lat
         const elev =
           ridge.hgt +
-          Math.sin(i * 0.55 + ridge.dist * 0.01) * ridge.amp +
-          Math.sin(i * 1.3) * ridge.amp * 0.35
+          Math.sin(i * 0.45 + ridge.dist * 0.008) * ridge.amp +
+          Math.sin(i * 1.15) * ridge.amp * 0.35
         const p = projectNear({ x: wx, y: Math.max(0, elev), z: wz }, cam, w, h)
         if (p) pts.push(p)
       }
@@ -475,29 +502,49 @@ export class Renderer {
       ctx.fill()
     }
 
-    // Simple road arc south of field
-    for (let i = -8; i < 8; i++) {
-      const t0 = i / 8
-      const t1 = (i + 1) / 8
-      const x0 = -180 + t0 * 360
-      const x1 = -180 + t1 * 360
-      const z0 = -160 + Math.sin(t0 * Math.PI) * 25
-      const z1 = -160 + Math.sin(t1 * Math.PI) * 25
-      const a = projectNear({ x: x0, y: 0.04, z: z0 }, cam, w, h)
-      const b = projectNear({ x: x1, y: 0.04, z: z1 }, cam, w, h)
-      if (!a || !b) continue
-      ctx.strokeStyle = 'rgba(70,70,75,0.55)'
-      ctx.lineWidth = Math.max(1.5, 28 / ((a.d + b.d) / 2))
-      ctx.beginPath()
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(b.x, b.y)
-      ctx.stroke()
+    // Soft haze veil just above ridgeline (keeps structure without empty sky void)
+    const hazeY = h * (0.42 - clamp(alt / 2000, 0, 0.12))
+    const hg = ctx.createLinearGradient(0, hazeY, 0, hazeY + h * 0.2)
+    hg.addColorStop(0, 'rgba(180,200,210,0)')
+    hg.addColorStop(0.5, `rgba(170,190,205,${0.08 + clamp(alt / 1500, 0, 0.12)})`)
+    hg.addColorStop(1, 'rgba(160,180,190,0)')
+    ctx.fillStyle = hg
+    ctx.fillRect(0, hazeY, w, h * 0.22)
+
+    // Simple road arc — still a near landmark when low
+    if (alt < 250) {
+      for (let i = -8; i < 8; i++) {
+        const t0 = i / 8
+        const t1 = (i + 1) / 8
+        const x0 = -180 + t0 * 360
+        const x1 = -180 + t1 * 360
+        const z0 = -160 + Math.sin(t0 * Math.PI) * 25
+        const z1 = -160 + Math.sin(t1 * Math.PI) * 25
+        const a = projectNear({ x: x0, y: 0.04, z: z0 }, cam, w, h)
+        const b = projectNear({ x: x1, y: 0.04, z: z1 }, cam, w, h)
+        if (!a || !b) continue
+        ctx.strokeStyle = 'rgba(70,70,75,0.55)'
+        ctx.lineWidth = Math.max(1.5, 28 / ((a.d + b.d) / 2))
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        ctx.stroke()
+      }
     }
   }
 
-  /** Farm / meadow patches around airport (keep clear of runway). */
-  private fields(ctx: CanvasRenderingContext2D, cam: Cam, w: number, h: number) {
-    const patches: { x: number; z: number; sx: number; sz: number; color: string }[] = [
+
+  /** Farm / meadow patches — follow craft; denser far massing at altitude. */
+  private fields(
+    ctx: CanvasRenderingContext2D,
+    cam: Cam,
+    w: number,
+    h: number,
+    farPatches: number,
+    alt: number,
+  ) {
+    // Static near-airport patches (runway landmark)
+    const fixed: { x: number; z: number; sx: number; sz: number; color: string }[] = [
       { x: -90, z: 40, sx: 35, sz: 28, color: 'rgba(92,110,48,0.45)' },
       { x: -100, z: -70, sx: 40, sz: 32, color: 'rgba(110,100,55,0.4)' },
       { x: 95, z: -20, sx: 38, sz: 30, color: 'rgba(85,105,50,0.42)' },
@@ -505,7 +552,7 @@ export class Renderer {
       { x: -70, z: 130, sx: 30, sz: 22, color: 'rgba(70,95,60,0.4)' },
       { x: 60, z: -110, sx: 36, sz: 24, color: 'rgba(88,108,52,0.4)' },
     ]
-    for (const f of patches) {
+    const drawPatch = (f: { x: number; z: number; sx: number; sz: number; color: string }) => {
       const corners = [
         projectNear({ x: f.x - f.sx, y: 0.01, z: f.z - f.sz }, cam, w, h),
         projectNear({ x: f.x + f.sx, y: 0.01, z: f.z - f.sz }, cam, w, h),
@@ -513,7 +560,7 @@ export class Renderer {
         projectNear({ x: f.x - f.sx, y: 0.01, z: f.z + f.sz }, cam, w, h),
       ]
       const ok = corners.filter((p): p is Vec2 => !!p)
-      if (ok.length < 3) continue
+      if (ok.length < 3) return
       ctx.beginPath()
       ctx.moveTo(ok[0]!.x, ok[0]!.y)
       for (let i = 1; i < ok.length; i++) ctx.lineTo(ok[i]!.x, ok[i]!.y)
@@ -521,7 +568,100 @@ export class Renderer {
       ctx.fillStyle = f.color
       ctx.fill()
     }
+    for (const f of fixed) drawPatch(f)
+
+    // Craft-following countryside tiles so world never empties past tree radius
+    const cell = 160 + alt * 0.35
+    const ox = Math.floor(cam.x / cell)
+    const oz = Math.floor(cam.z / cell)
+    const ring = 2 + Math.floor(farPatches / 8)
+    for (let ix = -ring; ix <= ring; ix++) {
+      for (let iz = -ring; iz <= ring; iz++) {
+        const gx = ox + ix
+        const gz = oz + iz
+        const hsh = hash(gx * 17.1 + gz * 31.7)
+        if (hsh < 0.35) continue
+        const cx = gx * cell + (hash(gx + 0.3) - 0.5) * cell * 0.5
+        const cz = gz * cell + (hash(gz + 0.7) - 0.5) * cell * 0.5
+        // Keep clear of runway / pad
+        if (Math.hypot(cx - PAD_X, cz - PAD_Z) < PAD_R + 40) continue
+        if (Math.abs(cx - RWY_X) < RWY_HALF_W + 30 && cz > RWY_Z0 - 40 && cz < RWY_Z1 + 40) continue
+        const sx = 28 + hsh * 55 + alt * 0.08
+        const sz = 22 + hash(gx * 3.1) * 48 + alt * 0.06
+        const colors = [
+          'rgba(92,110,48,0.38)',
+          'rgba(110,100,55,0.34)',
+          'rgba(70,95,60,0.36)',
+          'rgba(100,95,50,0.32)',
+        ]
+        drawPatch({
+          x: cx,
+          z: cz,
+          sx,
+          sz,
+          color: colors[(Math.abs(gx * 3 + gz) % colors.length)]!,
+        })
+      }
+    }
   }
+
+  /** Far LOD land massing / cloud banks — visible above 1000 ft when near trees cull. */
+  private farMassing(
+    ctx: CanvasRenderingContext2D,
+    cam: Cam,
+    w: number,
+    h: number,
+    farPatches: number,
+    alt: number,
+  ) {
+    if (alt < 80) return
+    const n = Math.min(farPatches + 4, 28)
+    const reach = SCENERY_FAR_M * (0.45 + clamp(alt / 800, 0, 1) * 0.55)
+    for (let i = 0; i < n; i++) {
+      const ang = cam.yaw + (hash(i + 3.3) - 0.5) * 2.4
+      const dist = 350 + hash(i + 4.4) * reach
+      const wx = cam.x + Math.sin(ang) * dist
+      const wz = cam.z + Math.cos(ang) * dist
+      const elev = 8 + hash(i + 5) * (18 + alt * 0.02)
+      const half = 80 + hash(i + 6) * 140 + alt * 0.12
+      const corners = [
+        projectNear({ x: wx - half, y: elev * 0.15, z: wz - half * 0.6 }, cam, w, h),
+        projectNear({ x: wx + half, y: elev * 0.15, z: wz - half * 0.6 }, cam, w, h),
+        projectNear({ x: wx + half * 0.8, y: elev, z: wz + half * 0.5 }, cam, w, h),
+        projectNear({ x: wx - half * 0.8, y: elev, z: wz + half * 0.5 }, cam, w, h),
+      ]
+      const ok = corners.filter((p): p is Vec2 => !!p)
+      if (ok.length < 3) continue
+      ctx.beginPath()
+      ctx.moveTo(ok[0]!.x, ok[0]!.y)
+      for (let k = 1; k < ok.length; k++) ctx.lineTo(ok[k]!.x, ok[k]!.y)
+      ctx.closePath()
+      const a = 0.12 + hash(i) * 0.14
+      ctx.fillStyle = `rgba(${50 + hash(i) * 30 | 0},${65 + hash(i + 1) * 25 | 0},${45 + hash(i + 2) * 20 | 0},${a})`
+      ctx.fill()
+    }
+    // High cloud puffs (cheap) for altitude structure
+    if (alt > 200) {
+      for (let i = 0; i < Math.min(10, 4 + farPatches / 4); i++) {
+        const ang = cam.yaw + (hash(i + 40) - 0.5) * 1.8
+        const dist = 500 + hash(i + 41) * 900
+        const wy = 180 + hash(i + 42) * 220 + alt * 0.15
+        const wx = cam.x + Math.sin(ang) * dist
+        const wz = cam.z + Math.cos(ang) * dist
+        const p = project({ x: wx, y: wy, z: wz }, cam, w, h)
+        if (!p || p.d < 80) continue
+        const s = clamp(220 / p.d, 8, 55)
+        ctx.fillStyle = `rgba(240,245,250,${0.18 + hash(i) * 0.2})`
+        ctx.beginPath()
+        ctx.ellipse(p.x, p.y, s * 1.6, s * 0.55, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(p.x + s * 0.5, p.y - s * 0.15, s, s * 0.45, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+  }
+
 
   private buildings(ctx: CanvasRenderingContext2D, sim: Sim, w: number, h: number, n: number) {
     for (let i = 0; i < n; i++) {
@@ -568,17 +708,23 @@ export class Renderer {
   }
 
   private trees(ctx: CanvasRenderingContext2D, sim: Sim, w: number, h: number, n: number) {
-    // Extra bushes / low scrub for height/motion readability (phone-safe props)
-    const scrub = Math.min(n, Math.floor(n * 0.45) + 8)
+    const cam = sim.cam
+    const alt = Math.max(0, sim.craft.y)
+    // At altitude: fewer near trees (phone), but still ring the craft so scenery doesn't vanish
+    const nearN = alt > 120 ? Math.max(8, Math.floor(n * 0.45)) : n
+    const drawR = SCENERY_NEAR_M + alt * 1.2
+    const cell = 90
+
+    const scrub = Math.min(nearN, Math.floor(nearN * 0.45) + 6)
     for (let i = 0; i < scrub; i++) {
       const ang = hash(i + 90.1) * Math.PI * 2
-      const dist = 18 + hash(i + 91) * 140
-      const tx = Math.cos(ang) * dist
-      const tz = Math.sin(ang) * dist
+      const dist = 18 + hash(i + 91) * Math.min(140, drawR * 0.55)
+      const tx = cam.x + Math.cos(ang) * dist
+      const tz = cam.z + Math.sin(ang) * dist
       if (Math.hypot(tx - PAD_X, tz - PAD_Z) < PAD_R + 6) continue
       if (Math.abs(tx - RWY_X) < RWY_HALF_W + 10 && tz > RWY_Z0 - 8 && tz < RWY_Z1 + 8) continue
-      const base = project({ x: tx, y: 0, z: tz }, sim.cam, w, h)
-      if (!base || base.d > 320) continue
+      const base = project({ x: tx, y: 0, z: tz }, cam, w, h)
+      if (!base || base.d > drawR) continue
       const s = clamp(28 / base.d, 1.5, 9)
       ctx.fillStyle = `rgba(${40 + (hash(i) * 40) | 0},${70 + (hash(i + 2) * 50) | 0},32,0.75)`
       ctx.beginPath()
@@ -586,52 +732,61 @@ export class Renderer {
       ctx.fill()
     }
 
-    for (let i = 0; i < n; i++) {
-      const ang = hash(i + 20.1) * Math.PI * 2
-      const dist = 28 + hash(i + 21) * 220
-      const tx = Math.cos(ang) * dist
-      const tz = Math.sin(ang) * dist
-      if (Math.hypot(tx - PAD_X, tz - PAD_Z) < PAD_R + 8) continue
-      if (Math.abs(tx - RWY_X) < RWY_HALF_W + 14 && tz > RWY_Z0 - 10 && tz < RWY_Z1 + 10) continue
-      const kind = hash(i + 7) // 0..1 — mix round canopy / conifer
-      const ht = 6 + hash(i) * 10
-      const base = project({ x: tx, y: 0, z: tz }, sim.cam, w, h)
-      const top = project({ x: tx, y: ht, z: tz }, sim.cam, w, h)
-      if (!base || !top) continue
-      const s = clamp(55 / base.d, 3, 22)
-      ctx.strokeStyle = '#3a2818'
-      ctx.lineWidth = Math.max(1.5, s * 0.35)
-      ctx.beginPath()
-      ctx.moveTo(base.x, base.y)
-      ctx.lineTo(top.x, top.y)
-      ctx.stroke()
-      const g = (28 + hash(i) * 35) | 0
-      const gr = (85 + hash(i + 1) * 45) | 0
-      if (kind > 0.45) {
-        // Conifer triangle stack
-        ctx.fillStyle = `rgba(${g},${gr},38,0.88)`
-        for (let tier = 0; tier < 3; tier++) {
-          const ty = top.y + (base.y - top.y) * (0.15 + tier * 0.22)
-          const tw = s * (0.7 + tier * 0.35)
+    // Tile-anchored trees that follow the craft (world never runs out)
+    const ox = Math.floor(cam.x / cell)
+    const oz = Math.floor(cam.z / cell)
+    const ring = 3 + Math.floor(nearN / 20)
+    let drawn = 0
+    for (let ix = -ring; ix <= ring && drawn < nearN; ix++) {
+      for (let iz = -ring; iz <= ring && drawn < nearN; iz++) {
+        const gx = ox + ix
+        const gz = oz + iz
+        const hsh = hash(gx * 12.7 + gz * 9.3 + 20.1)
+        if (hsh < 0.42) continue
+        const tx = gx * cell + (hash(gx + 1.2) - 0.5) * cell * 0.8
+        const tz = gz * cell + (hash(gz + 2.2) - 0.5) * cell * 0.8
+        if (Math.hypot(tx - PAD_X, tz - PAD_Z) < PAD_R + 8) continue
+        if (Math.abs(tx - RWY_X) < RWY_HALF_W + 14 && tz > RWY_Z0 - 10 && tz < RWY_Z1 + 10) continue
+        const kind = hash(gx * 3 + gz + 7)
+        const ht = 6 + hsh * 10
+        const base = project({ x: tx, y: 0, z: tz }, cam, w, h)
+        const top = project({ x: tx, y: ht, z: tz }, cam, w, h)
+        if (!base || !top || base.d > drawR) continue
+        drawn++
+        const s = clamp(55 / base.d, 3, 22)
+        ctx.strokeStyle = '#3a2818'
+        ctx.lineWidth = Math.max(1.5, s * 0.35)
+        ctx.beginPath()
+        ctx.moveTo(base.x, base.y)
+        ctx.lineTo(top.x, top.y)
+        ctx.stroke()
+        const g = (28 + hsh * 35) | 0
+        const gr = (85 + hash(gx + gz) * 45) | 0
+        if (kind > 0.45) {
+          ctx.fillStyle = `rgba(${g},${gr},38,0.88)`
+          for (let tier = 0; tier < 3; tier++) {
+            const ty = top.y + (base.y - top.y) * (0.15 + tier * 0.22)
+            const tw = s * (0.7 + tier * 0.35)
+            ctx.beginPath()
+            ctx.moveTo(top.x, top.y + (base.y - top.y) * (tier * 0.18))
+            ctx.lineTo(top.x - tw, ty)
+            ctx.lineTo(top.x + tw, ty)
+            ctx.closePath()
+            ctx.fill()
+          }
+        } else {
+          ctx.fillStyle = `rgba(${g},${gr},38,0.85)`
           ctx.beginPath()
-          ctx.moveTo(top.x, top.y + (base.y - top.y) * (tier * 0.18))
-          ctx.lineTo(top.x - tw, ty)
-          ctx.lineTo(top.x + tw, ty)
-          ctx.closePath()
+          ctx.arc(top.x, top.y, s, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(top.x + s * 0.35, top.y + s * 0.2, s * 0.65, 0, Math.PI * 2)
           ctx.fill()
         }
-      } else {
-        ctx.fillStyle = `rgba(${g},${gr},38,0.85)`
-        ctx.beginPath()
-        ctx.arc(top.x, top.y, s, 0, Math.PI * 2)
-        ctx.fill()
-        // secondary lobe
-        ctx.beginPath()
-        ctx.arc(top.x + s * 0.35, top.y + s * 0.2, s * 0.65, 0, Math.PI * 2)
-        ctx.fill()
       }
     }
   }
+
 
   private particles(ctx: CanvasRenderingContext2D, sim: Sim, w: number, h: number, dt: number, max: number) {
     const craft = sim.craft

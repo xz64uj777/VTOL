@@ -1,4 +1,4 @@
-# Osprey Flight v8
+# Osprey Flight v9
 
 Phone/tablet flight sim — **Osprey** + **F-35**. Flight / controls / physics.
 
@@ -10,16 +10,17 @@ Do **not** overwrite `osprey-best.zip` — Dude flips best.
 
 ---
 
-## What Kyle hit (v7) → what v8 changed
+## What Kyle hit (v8) → what v9 changed
 
 | You said | This build |
 |----------|------------|
-| F-35 **floats** on the runway instead of taxiing | CTOL on wheels: throttle **rolls**. Pitch up to rotate. VL still hovers if you raise VEC |
-| Runway **disappeared** | Strip stays drawn from chase / wing / tower / down the field |
-| Starts mid-hover | **Cold:** throttle 0, flaps 0, nacelles/VEC airplane. Raise NAC or VEC for hover |
-| More terrain | Fields, hills, road, extra taxiways. Runway is still the landmark |
+| Past ~1000 ft the world **empties** | Fields, trees, ridges, clouds follow you up. Horizon scales with altitude |
+| Sound goes **static** up high | Audio levels clamped so it doesn’t clip into noise. Osprey still slaps, F-35 still roars |
+| Camera from **under/behind** looks wrong | Chase stays **above and behind**. No belly view |
+| F-35 **jumps** on the runway | Jet ground pin. No Osprey bounce spring. Rolls, then rotate to lift |
+| **Hangar** next to Pause — easy mis-tap | Hangar off the flight bar. It’s in **Settings** (asks first). Crash screen still has Hangar |
 
-v3–v7 still locked: Settings pauses until Resume · mute · Cal frozen · 5s tilt · LEVEL · yaw bar left · deck gear/flaps · convert tether / no black HUD · F-35 roar / Osprey slap.
+v3–v8 still locked: Settings pauses until Resume · mute · Cal frozen · 5s tilt · LEVEL · yaw bar left · deck · cold start · runway stays painted · convert tether.
 
 ---
 

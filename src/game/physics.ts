@@ -22,6 +22,10 @@ import {
   F35_CONV_BRIDGE,
   F35_CONV_WING_SPEED,
   F35_DRAG_H,
+  F35_CTOL_ROTATE_SPEED,
+  F35_CTOL_ROTATE_PITCH,
+  F35_CTOL_ROTATE_THR,
+  F35_CTOL_AIR_HYST,
   F35_GEAR_H,
   F35_HOVER_THR,
   F35_LIFT_FAN,
@@ -385,10 +389,20 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const agl = Math.max(0, c.y - F35_GEAR_H)
   const contactH = c.gearDown ? F35_GEAR_H : F35_GEAR_H * 0.5
 
-  // CTOL weight-on-wheels: vector near airplane (not VL/STOVL hover band)
+  // CTOL weight-on-wheels (jet-specific — NOT Osprey plantGear spring)
   const ctolVec = vlFrac < F35_STOVL_MIN * 0.85 // ~0.30 — clear of STOVL float
-  const nearDeck = c.gearDown && agl < 0.55
-  const wowCtol = nearDeck && ctolVec && (c.onGround || agl < 0.35)
+  const nearDeck = c.gearDown && agl < 0.85
+  // Hysteresis: stay WOW until clear rotate; re-latch only when firmly planted
+  let wowCtol = false
+  if (ctolVec && c.gearDown) {
+    if (c.onGround) {
+      // Stay latched while onGround until rotate criteria met (handled below)
+      wowCtol = agl < F35_CTOL_AIR_HYST + 0.4
+    } else if (agl < 0.25 && c.vy <= 0.4) {
+      wowCtol = true
+    }
+  }
+
 
   if (mode === 'STOVL') {
     if (speedKt > 180) envelopeWarn = 'FAST for STOVL — slow or go CTOL'
@@ -571,21 +585,27 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   if (!Number.isFinite(c.z)) c.z = 0
   if (!Number.isFinite(c.aoa)) c.aoa = c.pitch
 
-  // —— Ground contact ——
-  if (wowCtol || (ctolVec && c.gearDown && c.y <= contactH + 0.15)) {
-    // Hard pin wheels to pavement in CTOL — no hover float
+  // —— F-35 CTOL ground (jet-specific): hard pin + critical damp — no plantGear spring ——
+  if (wowCtol || (ctolVec && c.gearDown && c.y <= contactH + 0.2 && c.vy < 2)) {
+    // Critically damp vertical & pin every frame — kills runway hop / spring fight
     c.y = contactH
-    c.vy = 0
+    c.vy *= Math.exp(-28 * dt) // critical settle
+    if (Math.abs(c.vy) < 0.35) c.vy = 0
     c.onGround = true
 
-    // Rolling friction (lighter when throttling so taxi works)
-    const rollMu = c.parkingBrake ? 14 : lerp(5.5, 1.1, clamp(ctrl.tcl, 0, 1))
+    // Stronger friction settle at taxi speeds (no micro-jump on uneven math)
+    const slow = clamp(1 - speedHoriz / 12, 0, 1)
+    const rollMu = c.parkingBrake ? 16 : lerp(7.5 + slow * 4, 1.0, clamp(ctrl.tcl, 0, 1))
     c.vx *= Math.exp(-rollMu * dt)
     c.vz *= Math.exp(-rollMu * dt)
+    if (speedHoriz < 0.35 && ctrl.tcl < 0.08) {
+      c.vx = 0
+      c.vz = 0
+    }
 
-    // Nosewheel steering at low speed; rudder authority builds with roll speed
+    // Nosewheel steering at low speed; rudder builds with roll speed
     const steer = clamp(ctrl.yaw + ctrl.cyclicRoll * 0.55, -1, 1)
-    const noseAuth = clamp(1.15 - speedHoriz / 38, 0.12, 1) // strong when slow
+    const noseAuth = clamp(1.15 - speedHoriz / 38, 0.12, 1)
     const rudAuth = clamp(speedHoriz / 45, 0.15, 1)
     const yawRateGnd = F35_YAW_RATE * (noseAuth * 1.35 + rudAuth * 0.85)
     c.yaw = wrapAngle(c.yaw + steer * yawRateGnd * dt)
@@ -594,24 +614,36 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     if (speedHoriz > 0.4) {
       const wantVx = Math.sin(c.yaw) * speedHoriz
       const wantVz = Math.cos(c.yaw) * speedHoriz
-      c.vx = lerp(c.vx, wantVx, 1 - Math.exp(-4 * dt))
-      c.vz = lerp(c.vz, wantVz, 1 - Math.exp(-4 * dt))
+      c.vx = lerp(c.vx, wantVx, 1 - Math.exp(-4.5 * dt))
+      c.vz = lerp(c.vz, wantVz, 1 - Math.exp(-4.5 * dt))
     }
 
-    // Rotate / lift-off: enough speed + nose up + thrust → break WOW
-    const rotateReady = speedHoriz > 38 && c.pitch > 0.12 && ctrl.tcl > 0.55
+    // Leave ground ONLY with clear rotate criteria (hysteresis — no flicker)
+    const rotateReady =
+      speedHoriz > F35_CTOL_ROTATE_SPEED &&
+      c.pitch > F35_CTOL_ROTATE_PITCH &&
+      ctrl.tcl > F35_CTOL_ROTATE_THR
     if (rotateReady) {
       c.onGround = false
-      c.vy = Math.max(c.vy, 1.2 + (ctrl.tcl - 0.55) * 4)
-      c.y = contactH + 0.05
+      c.vy = Math.max(0.8, 1.2 + (ctrl.tcl - F35_CTOL_ROTATE_THR) * 4)
+      c.y = contactH + 0.35 // clear latch band so WOW does not re-grab next frame
     }
   } else if (!ctolVec && nearDeck && (mode === 'VL' || mode === 'STOVL')) {
-    // VL/STOVL hover-taxi: light plant, fan may hold off deck slightly
+    // VL/STOVL hover-taxi only — Osprey-style plant OK here (not CTOL)
     const plantThr = mode === 'VL' ? 0.55 : 0.38
     plantGear(c, contactH, ctrl, plantThr, dt)
-  } else {
+  } else if (!ctolVec) {
     const plantThr = mode === 'VL' ? 0.55 : mode === 'STOVL' ? 0.38 : 0.18
     plantGear(c, contactH, ctrl, plantThr, dt)
+  } else if (ctolVec && c.gearDown && c.y < contactH + F35_CTOL_AIR_HYST) {
+    // CTOL but briefly airborne under hysteresis ceiling: soft settle, still no spring
+    if (c.y < contactH) {
+      c.y = contactH
+      c.vy = 0
+      c.onGround = true
+    } else {
+      c.vy *= Math.exp(-12 * dt)
+    }
   }
 
   if (mode === 'VL' && !c.onGround && ctrl.tcl < F35_HOVER_THR - 0.15 && experience === 'advanced') {

@@ -1,6 +1,12 @@
 import { clamp, lerp, modeFromCraft, wrapAngle } from './physics'
 import type { Cam, CamMode, Craft } from './types'
 
+/** Minimum camera height above craft CG — never under the belly. */
+const CAM_MIN_ABOVE = 4.2
+/** Chase look pitch clamp: negative = looking down at craft; never strongly up-from-below. */
+const CHASE_PITCH_MIN = -0.72
+const CHASE_PITCH_MAX = 0.08
+
 export function createCam(): Cam {
   return {
     x: 0,
@@ -27,6 +33,7 @@ export function resetCamOffsets(cam: Cam): void {
 
 /**
  * Chase → Wing → Tower → Pad → Orbit.
+ * v9: chase stays above+behind (clamp y / pitch); altitude damps attitude coupling; less jitter.
  * v7: touch yaw/pitch offsets; wing + tower modes; heavier chase damp / less micro-lead.
  * v6: craft-in-view snap + kill velocity lead on convert/decel + hard tether.
  */
@@ -43,6 +50,9 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   if (!Number.isFinite(cam.pitchOff)) cam.pitchOff = 0
 
   const speed = Math.hypot(craft.vx, craft.vz)
+  const agl = Math.max(0, craft.y)
+  // At altitude, damp pitch/roll coupling so chase never flips under when craft pitches
+  const altDamp = clamp(1 - agl / 400, 0.35, 1)
   let tx = craft.x
   let ty = craft.y + 2.8
   let tz = craft.z
@@ -51,42 +61,45 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   let wantDist = cam.dist
   const cx = cam as CamX
   const yOff = cam.yawOff
-  const pOff = clamp(cam.pitchOff, -0.55, 0.45)
+  // Pitch offset: never allow touch drag to drop cam under craft
+  const pOff = clamp(cam.pitchOff, -0.35, 0.45)
 
   if (mode === 'chase') {
     const back = 20 + clamp(speed * 0.4, 0, 16)
-    const height = 6.5 + clamp(speed * 0.09, 0, 5)
+    // Height grows with speed AND altitude — always above craft
+    const height = 6.5 + clamp(speed * 0.09, 0, 5) + clamp(agl * 0.012, 0, 8)
     const lookX = craft.x
     const lookY = craft.y + 1.6
     const lookZ = craft.z
     const yawBase = craft.yaw + yOff
     tx = craft.x - Math.sin(yawBase) * back
     tz = craft.z - Math.cos(yawBase) * back
-    ty = craft.y + height + pOff * 14
+    ty = craft.y + height + pOff * 10
+    ty = Math.max(ty, craft.y + CAM_MIN_ABOVE)
     const dx = lookX - tx
     const dy = lookY - ty
     const dz = lookZ - tz
     const horiz = Math.hypot(dx, dz) || 1
     wantYaw = Math.atan2(dx, dz)
-    wantPitch = Math.atan2(dy, horiz)
+    // Soften look pitch at altitude; clamp so we never look up from below
+    wantPitch = clamp(Math.atan2(dy, horiz) * altDamp, CHASE_PITCH_MIN, CHASE_PITCH_MAX)
     wantDist = back
   } else if (mode === 'wing') {
-    // Side / wingtip chase — look across the craft from the right wing
     const side = 18 + clamp(speed * 0.12, 0, 8)
     const back = 6 + clamp(speed * 0.08, 0, 6)
     const yawBase = craft.yaw + Math.PI * 0.5 + yOff
     tx = craft.x - Math.sin(yawBase) * side - Math.sin(craft.yaw) * back
     tz = craft.z - Math.cos(yawBase) * side - Math.cos(craft.yaw) * back
-    ty = craft.y + 4.5 + pOff * 10
+    ty = craft.y + 4.5 + pOff * 8
+    ty = Math.max(ty, craft.y + CAM_MIN_ABOVE * 0.85)
     const dx = craft.x - tx
     const dy = craft.y + 1.2 - ty
     const dz = craft.z - tz
     const horiz = Math.hypot(dx, dz) || 1
     wantYaw = Math.atan2(dx, dz)
-    wantPitch = Math.atan2(dy, horiz)
+    wantPitch = clamp(Math.atan2(dy, horiz) * altDamp, CHASE_PITCH_MIN, 0.12)
     wantDist = Math.hypot(side, back)
   } else if (mode === 'tower') {
-    // Elevated tower-like view near airport, looking at craft
     const towerX = -55
     const towerY = 38
     const towerZ = 70
@@ -120,13 +133,14 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
     wantDist = 28 + clamp(speed * 0.28, 0, 12)
     tx = craft.x - Math.sin(ang) * wantDist
     tz = craft.z - Math.cos(ang) * wantDist
-    ty = craft.y + 11 + pOff * 12
+    ty = craft.y + 11 + pOff * 10
+    ty = Math.max(ty, craft.y + CAM_MIN_ABOVE)
     const dx = craft.x - tx
     const dy = craft.y + 1.4 - ty
     const dz = craft.z - tz
     const horiz = Math.hypot(dx, dz) || 1
     wantYaw = Math.atan2(dx, dz)
-    wantPitch = Math.atan2(dy, horiz)
+    wantPitch = clamp(Math.atan2(dy, horiz), CHASE_PITCH_MIN, 0.1)
   }
 
   // Velocity lead: cut hard when decelerating, sinking, or mid convert / STOVL.
@@ -146,17 +160,22 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
       const leadT = clamp(speed * 0.03, 0.015, 0.16)
       tx += craft.vx * leadT
       tz += craft.vz * leadT
-      ty += craft.vy * leadT * 0.2
+      ty += craft.vy * leadT * 0.15 * altDamp
     } else if (mode === 'wing') {
       const leadT = clamp(speed * 0.02, 0.01, 0.08)
       tx += craft.vx * leadT
       tz += craft.vz * leadT
     } else {
-      // Chase: tiny lead only when accelerating cleanly — v7: less micro-lead
-      const leadT = clamp(speed * 0.018, 0.01, 0.07)
+      // Chase: tiny lead only when accelerating cleanly — v7/v9: less micro-lead
+      const leadT = clamp(speed * 0.015, 0.008, 0.055) * altDamp
       tx += craft.vx * leadT
       tz += craft.vz * leadT
     }
+  }
+
+  // Re-assert above-behind after lead
+  if (mode === 'chase' || mode === 'wing' || mode === 'orbit') {
+    ty = Math.max(ty, craft.y + CAM_MIN_ABOVE * (mode === 'wing' ? 0.85 : 1))
   }
 
   const toCraftX = craft.x - cam.x
@@ -170,48 +189,63 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   const craftBehind = forwardDot < 0.15
   const craftTooFar = craftDist > wantDist * 1.35
   const craftTooClose = craftDist < wantDist * 0.35 && (mode === 'chase' || mode === 'wing')
+  const camUnder = cam.y < craft.y + CAM_MIN_ABOVE * 0.5
 
   const err = Math.hypot(tx - cam.x, ty - cam.y, tz - cam.z)
   const frameW = Math.max(wantDist, 14)
   const errFrames = err / frameW
   const targetMiss = errFrames >= 0.85 || err > frameW * 1.2
-  const snap = targetMiss || craftBehind || craftTooFar || craftTooClose
+  const snap = targetMiss || craftBehind || craftTooFar || craftTooClose || camUnder
 
   if (snap) {
     cam.x = tx
-    cam.y = ty
+    cam.y = Math.max(ty, craft.y + CAM_MIN_ABOVE * 0.9)
     cam.z = tz
     cam.yaw = wantYaw
-    cam.pitch = wantPitch
+    cam.pitch = clamp(wantPitch, CHASE_PITCH_MIN, CHASE_PITCH_MAX)
     cam.dist = wantDist
     return
   }
 
-  // v7: heavier chase damp to soften residual jitter
-  let k = mode === 'pad' || mode === 'tower' ? 6 : mode === 'chase' ? 12 : mode === 'wing' ? 11 : 8
-  k *= 1 + clamp(errFrames * 1.0, 0, 3.5)
+  // v9: slightly heavier chase damp to cut residual jitter
+  let k = mode === 'pad' || mode === 'tower' ? 6 : mode === 'chase' ? 10 : mode === 'wing' ? 10 : 7.5
+  k *= 1 + clamp(errFrames * 0.9, 0, 3)
   const a = 1 - Math.exp(-k * dt)
   cam.x = lerp(cam.x, tx, a)
   cam.y = lerp(cam.y, ty, a)
   cam.z = lerp(cam.z, tz, a)
+
+  // Hard floor: never under craft
+  if (mode === 'chase' || mode === 'wing' || mode === 'orbit') {
+    cam.y = Math.max(cam.y, craft.y + CAM_MIN_ABOVE)
+  }
 
   const lookAtX = craft.x - cam.x
   const lookAtY = craft.y + 1.6 - cam.y
   const lookAtZ = craft.z - cam.z
   const lookHoriz = Math.hypot(lookAtX, lookAtZ) || 1
   const craftYaw = Math.atan2(lookAtX, lookAtZ)
-  const craftPitch = Math.atan2(lookAtY, lookHoriz)
+  let craftPitch = Math.atan2(lookAtY, lookHoriz)
+  if (mode === 'chase' || mode === 'wing' || mode === 'orbit') {
+    craftPitch = clamp(craftPitch, CHASE_PITCH_MIN, CHASE_PITCH_MAX)
+  }
   const lookK =
-    mode === 'pad' || mode === 'tower' ? 1 : mode === 'orbit' ? 7 : mode === 'wing' ? 12 : 11
+    mode === 'pad' || mode === 'tower' ? 1 : mode === 'orbit' ? 6.5 : mode === 'wing' ? 10 : 9.5
   const ka = mode === 'pad' || mode === 'tower' ? 1 : 1 - Math.exp(-lookK * dt)
   cam.yaw += wrapAngle(craftYaw - cam.yaw) * ka
   cam.pitch = lerp(cam.pitch, craftPitch, ka)
+  if (mode === 'chase' || mode === 'wing' || mode === 'orbit') {
+    cam.pitch = clamp(cam.pitch, CHASE_PITCH_MIN, CHASE_PITCH_MAX)
+  }
   cam.dist = lerp(cam.dist, wantDist, ka)
 
   if (mode === 'chase' || mode === 'orbit' || mode === 'wing') {
     const dx = cam.x - craft.x
-    const dy = cam.y - (craft.y + 2.8)
+    let dy = cam.y - (craft.y + 2.8)
     const dz = cam.z - craft.z
+    // Prefer keeping above: if dy would go negative relative to min, bias up
+    const minDy = CAM_MIN_ABOVE - 2.8
+    if (dy < minDy) dy = minDy
     const d = Math.hypot(dx, dy, dz)
     const maxD = wantDist * CHASE_TETHER
     const minD = wantDist * 0.55
@@ -226,6 +260,7 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
       cam.y = craft.y + 2.8 + dy * s
       cam.z = craft.z + dz * s
     }
+    cam.y = Math.max(cam.y, craft.y + CAM_MIN_ABOVE)
   }
 }
 
