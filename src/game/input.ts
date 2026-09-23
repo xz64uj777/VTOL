@@ -47,15 +47,16 @@ export function createInput(): InputState {
   }
 }
 
-export function emptyControls(bird: BirdKind = 'osprey'): Controls {
+export function emptyControls(_bird: BirdKind = 'osprey'): Controls {
+  // Cold start: 0 throttle, flaps 0, rotation/nacelle airplane (CTOL / APL)
   return {
     cyclicPitch: 0,
     cyclicRoll: 0,
-    tcl: 0.38,
+    tcl: 0,
     yaw: 0,
-    nacelle: bird === 'osprey' ? 1 : 0,
-    vector: bird === 'f35' ? 0.85 : 0,
-    flaps: bird === 'f35' ? 0.25 : 0.4,
+    nacelle: 0,
+    vector: 0,
+    flaps: 0,
   }
 }
 

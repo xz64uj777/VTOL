@@ -1,6 +1,16 @@
 # Osprey Flight — IMPROVEMENTS
 
+## v8 (2026-09-22)
+
+### CTOL taxi · runway cull · cold start · terrain
+
+- **F-35 CTOL ground (HARD):** gear+WOW+VEC near CTOL pins `y` to gear height; kills lift-fan / GE / convert-bridge vertical; throttle→forward roll; nosewheel steer + rudder with speed; pitch-up rotate to lift off. VL/STOVL can still hover-taxi.
+- **Runway visible:** segmented asphalt + `projectNear` near-plane clamp — strip no longer vanishes when a corner is behind the camera.
+- **Cold start:** Fly / Reset / bird switch → THR 0, flaps 0, NAC APL / VEC CTOL, gear DOWN; VirtualControls `syncKey` forces knobs.
+- **Terrain:** fields, distant ridges/coast cue, road arc, extra taxi/ramp, denser trees/scrub; runway stays landmark.
+
 ## v7 (2026-09-22)
+
 
 ### Realism slice — cam / audio / deck / airport
 

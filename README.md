@@ -1,4 +1,4 @@
-# Osprey Flight v7
+# Osprey Flight v8
 
 Phone/tablet flight sim — **Osprey** + **F-35**. Flight / controls / physics.
 
@@ -10,17 +10,16 @@ Do **not** overwrite `osprey-best.zip` — Dude flips best.
 
 ---
 
-## What Kyle asked (v6) → what v7 changed
+## What Kyle hit (v7) → what v8 changed
 
-| Asked | This build |
-|-------|------------|
-| Touch camera + double-tap reset | Drag the sky to pan. Double-tap sky or **Cam** = defaults |
-| Better views | **CHASE → WING → TOWER → PAD → ORBIT** |
-| F-35 still a toy whine | Deep **roar + scream**. Osprey still slaps |
-| Gauges / gear / flaps on deck | **DECK**: GEAR, FLAPS, ASI/ALT/VS/HDG/NAC·VEC/N1 (Intermediate+ on) |
-| Actual runway | Runway, taxi, hangars, tower, windsock. Osprey on **pad**. F-35 on **threshold** |
+| You said | This build |
+|----------|------------|
+| F-35 **floats** on the runway instead of taxiing | CTOL on wheels: throttle **rolls**. Pitch up to rotate. VL still hovers if you raise VEC |
+| Runway **disappeared** | Strip stays drawn from chase / wing / tower / down the field |
+| Starts mid-hover | **Cold:** throttle 0, flaps 0, nacelles/VEC airplane. Raise NAC or VEC for hover |
+| More terrain | Fields, hills, road, extra taxiways. Runway is still the landmark |
 
-v3–v6 still locked: Settings pauses until Resume · mute in menu · Cal frozen · 5s tilt · LEVEL · yaw bar left · convert tether / no black HUD.
+v3–v7 still locked: Settings pauses until Resume · mute · Cal frozen · 5s tilt · LEVEL · yaw bar left · deck gear/flaps · convert tether / no black HUD · F-35 roar / Osprey slap.
 
 ---
 

@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v7 — tunables. */
+/** Osprey / F-35 Flight v8 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -88,9 +88,9 @@ export const MASS = OSP_MASS
 export const MAX_THRUST = OSP_MAX_THRUST
 
 export const QUALITY = {
-  low: { trees: 22, buildings: 6, particles: 0, shadows: false, groundDetail: 10 },
-  med: { trees: 48, buildings: 12, particles: 22, shadows: true, groundDetail: 16 },
-  high: { trees: 72, buildings: 20, particles: 44, shadows: true, groundDetail: 24 },
+  low: { trees: 28, buildings: 8, particles: 0, shadows: false, groundDetail: 10 },
+  med: { trees: 64, buildings: 14, particles: 22, shadows: true, groundDetail: 18 },
+  high: { trees: 90, buildings: 22, particles: 44, shadows: true, groundDetail: 26 },
 } as const
 
 export type QualityKey = keyof typeof QUALITY

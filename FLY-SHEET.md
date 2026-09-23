@@ -1,30 +1,26 @@
-# Fly sheet — Osprey Flight v7
+# Fly sheet — Osprey Flight v8
 
 Phone/tablet, landscape. Pass/fail by **feel**.
 
 ## What’s new
 
-- Drag the sky to look around. **Double-tap** = reset view
-- **Cam** cycles CHASE / WING / TOWER / PAD / ORBIT
-- **DECK** gear + flaps + glance gauges (Intermediate+)
-- Real runway. Osprey on pad. F-35 on the numbers
-- F-35 **roars**. Osprey still slaps
+- F-35 **rolls** on the runway. No float until you rotate
+- Runway stays visible
+- **Cold start:** power 0, flaps 0, airplane attitude (not hovering already)
+- More fields / hills / taxiways around the strip
 
 ## Good feels like
 
-1. Osprey → Fly. You’re on the **pad** next to the strip. Raise TCL.
-2. Drag empty sky — view moves. Double-tap — back to default. Tap **Cam** through 5 views.
-3. **DECK**: GEAR UP/DOWN, FLAPS −/+. ASI/ALT/HDG move with the bird.
-4. Hangar → **F-35**. You’re on the **runway**. Raise THR or lower VEC. Eyes closed: deep jet, not a toy.
-5. Convert still: bird stays in view, HUD stays sane.
-6. **Settings** still pauses; Close still does **not** Resume.
+1. Hangar → **F-35** → Fly. You’re on the **numbers**. Knobs at **0**. Mode **CTOL**. Flaps **0**. Gear down.
+2. Raise **THR**. It **rolls**. It does **not** hop into the air. Pitch up to lift off.
+3. Look down the strip from chase / wing / tower — runway **stays painted**.
+4. Hangar → **Osprey**. On the **pad**. Nacelles **forward**. Raise **NAC** then TCL if you want hover.
+5. Convert, drag-cam, DECK, Settings pause still work.
 
 ## Shout if (fail)
 
-- Cam drag does nothing / double-tap doesn’t reset
-- Only old chase/pad/orbit (no wing/tower)
-- No DECK / can’t move gear or flaps
-- No runway — just grass pad
-- F-35 still a mosquito whine
-- Convert: bird off-screen / black HUD (v6 regression)
-- Settings doesn’t pause
+- F-35 still floats the second you add power
+- Runway vanishes when you look down the strip
+- Fly starts with power already up / nacelles vertical / flaps out
+- Settings doesn’t pause / Close auto-resumes
+- Convert black-screens or bird leaves the frame (v6 regression)

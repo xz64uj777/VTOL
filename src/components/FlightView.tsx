@@ -75,6 +75,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const [hud, setHud] = useState(() => hudFrom(simRef.current))
   const [message, setMessage] = useState('')
   const [paused, setPaused] = useState(false)
+  const [controlsSync, setControlsSync] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [prefs, setPrefs] = useState<FlightPrefs>(() => bootPrefs(experience))
@@ -142,9 +143,10 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     sim.experience = experience
     sim.quality = quality
     startFlight(sim)
-    inputRef.current.touchTcl = null
-    inputRef.current.touchNacelle = null
-    inputRef.current.touchVector = null
+    inputRef.current.touchTcl = 0
+    inputRef.current.touchNacelle = 0
+    inputRef.current.touchVector = 0
+    setControlsSync((n) => n + 1)
     const base = { ...defaultPrefs(), experience, tipSeen: false }
     // Keep tilt/sens across sortie restart if already set
     prefsRef.current = {
@@ -527,7 +529,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     }, 400)
   }
 
-  const initialMode = bird === 'f35' ? 0.85 : 1
+  const initialMode = 0 // cold: NAC APL / VEC CTOL
   const bannerMsg = calStatus || tiltSticky || message
 
   return (
@@ -679,6 +681,10 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
             type="button"
             onClick={() => {
               startFlight(simRef.current)
+              inputRef.current.touchTcl = 0
+              inputRef.current.touchNacelle = 0
+              inputRef.current.touchVector = 0
+              setControlsSync((n) => n + 1)
               bump()
             }}
           >
@@ -702,8 +708,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         input={inputRef.current}
         bird={bird}
         tiltCyclic={prefs.tiltCyclic}
-        initialTcl={bird === 'f35' ? 0.45 : 0.42}
+        initialTcl={0}
         initialMode={initialMode}
+        syncKey={controlsSync}
       />
 
       <SystemsMenu

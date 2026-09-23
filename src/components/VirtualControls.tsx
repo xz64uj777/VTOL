@@ -11,14 +11,17 @@ type Props = {
   tiltCyclic?: boolean
   initialTcl?: number
   initialMode?: number
+  /** Bump on Hangar→Fly / Reset so knobs re-sync to cold defaults. */
+  syncKey?: number
 }
 
 export function VirtualControls({
   input,
   bird,
   tiltCyclic = false,
-  initialTcl = 0.42,
-  initialMode = 1,
+  initialTcl = 0,
+  initialMode = 0,
+  syncKey = 0,
 }: Props) {
   const cyclicRef = useRef<HTMLDivElement>(null)
   const yawRef = useRef<HTMLDivElement>(null)
@@ -81,8 +84,8 @@ export function VirtualControls({
     if (!el) return
     const knob = el.querySelector('.slider-knob') as HTMLDivElement | null
     if (knob) knob.style.top = `${(1 - initialTcl) * 100}%`
-    if (input.touchTcl == null) input.touchTcl = initialTcl
-  }, [initialTcl, input])
+    input.touchTcl = initialTcl
+  }, [initialTcl, input, syncKey])
 
   useEffect(() => {
     const el = modeRef.current
@@ -90,11 +93,13 @@ export function VirtualControls({
     const knob = el.querySelector('.slider-knob') as HTMLDivElement | null
     if (knob) knob.style.top = `${(1 - initialMode) * 100}%`
     if (bird === 'osprey') {
-      if (input.touchNacelle == null) input.touchNacelle = initialMode
+      input.touchNacelle = initialMode
+      input.touchVector = null
     } else {
-      if (input.touchVector == null) input.touchVector = initialMode
+      input.touchVector = initialMode
+      input.touchNacelle = null
     }
-  }, [initialMode, input, bird])
+  }, [initialMode, input, bird, syncKey])
 
   const moveCyclic = (el: HTMLDivElement, cx: number, cy: number) => {
     const r = el.getBoundingClientRect()

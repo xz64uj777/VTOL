@@ -43,15 +43,13 @@ export function startFlight(sim: Sim): void {
   sim.craft = createCraft(sim.bird)
   sim.cam = createCam()
   sim.camMode = 'chase'
-  sim.controls =
-    sim.bird === 'f35'
-      ? { ...emptyControls('f35'), tcl: 0.45, vector: 0.85 }
-      : { ...emptyControls('osprey'), tcl: 0.42, nacelle: 1 }
+  // Cold start — no mid-hover demo preset
+  sim.controls = emptyControls(sim.bird)
   sim.crashed = false
   sim.message =
     sim.bird === 'f35'
-      ? 'F-35 VL — raise THR, use VEC slider (VL↔STOVL↔CTOL)'
-      : 'HEL — raise TCL to lift, then convert with nacelle slider'
+      ? 'Cold CTOL — THR up to taxi/roll; VEC aft. Raise VEC for STOVL/VL hover.'
+      : 'Cold APL — nacelles forward. Raise NAC for HEL hover, or roll with TCL.'
   sim.envelopeWarn = ''
   sim.time = 0
   sim.paused = false
@@ -170,8 +168,8 @@ export function stepSim(sim: Sim, controls: Controls, dt: number): void {
     if (sim.time > 2 && Math.hypot(sim.craft.vx, sim.craft.vz) < 0.5) {
       sim.message =
         sim.bird === 'f35'
-          ? 'On pad — raise THR in VL, or CTOL roll with VEC down'
-          : 'On pad — raise TCL (HEL) to take off'
+          ? 'On deck — CTOL: THR to taxi/roll; or raise VEC for VL hover'
+          : 'On pad — raise NAC to HEL + TCL to lift, or APL roll'
     }
   } else if (sim.bird === 'osprey') {
     const mode = modeFromNacelle(sim.craft.nacelleDeg)

@@ -110,12 +110,13 @@ export function createCraft(kind: BirdKind = 'osprey'): Craft {
     roll: 0,
     yaw: 0,
     onGround: true,
-    rotorRpm: 0.12,
-    nacelleDeg: kind === 'osprey' ? 90 : 0,
-    vectorPos: kind === 'f35' ? 0.85 : 0, // F-35 starts ready for VL/STOVL demo
+    rotorRpm: 0.05,
+    // Cold start: airplane / CTOL — nacelles forward, VEC aft (not mid-hover demo)
+    nacelleDeg: 0,
+    vectorPos: 0,
     aoa: 0,
     gearDown: true,
-    flaps: kind === 'f35' ? 0.25 : 0.4,
+    flaps: 0,
     fuel: 1,
     engineL: 1,
     engineR: 1,
@@ -382,6 +383,12 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const speedHoriz = Math.hypot(c.vx, c.vz)
   const speedKt = speedHoriz * 1.94384
   const agl = Math.max(0, c.y - F35_GEAR_H)
+  const contactH = c.gearDown ? F35_GEAR_H : F35_GEAR_H * 0.5
+
+  // CTOL weight-on-wheels: vector near airplane (not VL/STOVL hover band)
+  const ctolVec = vlFrac < F35_STOVL_MIN * 0.85 // ~0.30 — clear of STOVL float
+  const nearDeck = c.gearDown && agl < 0.55
+  const wowCtol = nearDeck && ctolVec && (c.onGround || agl < 0.35)
 
   if (mode === 'STOVL') {
     if (speedKt > 180) envelopeWarn = 'FAST for STOVL — slow or go CTOL'
@@ -390,11 +397,14 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   } else if (mode === 'VL') {
     if (speedKt > 55) envelopeWarn = 'VL — reduce forward speed'
     else if (experience !== 'casual') envelopeWarn = 'VL — lift fan + nozzle'
+  } else if (mode === 'CTOL' && wowCtol) {
+    if (ctrl.tcl < 0.08) envelopeWarn = 'CTOL cold — throttle up to taxi / roll'
+    else if (speedKt < 55) envelopeWarn = 'CTOL roll — accelerate, rotate to lift'
   } else if (mode === 'CTOL' && speedKt < 75 && agl > 5 && ctrl.tcl < 0.45) {
     envelopeWarn = 'CTOL — keep speed / AoA'
   }
 
-  // v4: full pitch authority in every mode (no mode bleed to zero)
+  // Attitude — nosewheel / rudder on ground handled after forces
   const pitchCmd = ctrl.cyclicPitch * F35_PITCH_RATE
   let rollCmd = ctrl.cyclicRoll * F35_ROLL_RATE
   let yawCmd = ctrl.yaw * F35_YAW_RATE * (mode === 'CTOL' ? clamp(speedHoriz / 50, 0.2, 1) : 1)
@@ -403,17 +413,25 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     yawCmd += ctrl.tcl * 0.04 * ctrl.cyclicRoll
   }
 
-  c.pitch += pitchCmd * dt
-  c.roll += rollCmd * dt
-  c.yaw = wrapAngle(c.yaw + yawCmd * dt)
+  if (!wowCtol) {
+    c.pitch += pitchCmd * dt
+    c.roll += rollCmd * dt
+    c.yaw = wrapAngle(c.yaw + yawCmd * dt)
+  } else {
+    // On deck CTOL: allow rotate (pitch up) for takeoff; keep wings level; steer with yaw/cyclic
+    c.pitch += pitchCmd * dt
+    c.roll *= Math.exp(-5 * dt)
+    c.roll += rollCmd * 0.15 * dt
+  }
 
-  const pitchLim = mode === 'STOVL' ? 0.62 : mode === 'VL' ? 0.5 : 0.58
+  const pitchLim = mode === 'STOVL' ? 0.62 : mode === 'VL' ? 0.5 : wowCtol ? 0.42 : 0.58
   c.pitch = clamp(c.pitch, -pitchLim, pitchLim)
   c.roll = clamp(c.roll, -0.9, 0.9)
   const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
   const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
-  if (!stickPitchLive) c.pitch *= Math.exp(-0.2 * dt)
+  if (!stickPitchLive && !wowCtol) c.pitch *= Math.exp(-0.2 * dt)
   if (!stickRollLive) c.roll *= Math.exp(-0.26 * dt)
+  if (wowCtol && !stickPitchLive) c.pitch *= Math.exp(-1.8 * dt) // settle on nosewheel
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -429,14 +447,13 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const uy = cp * cr
   const uz = cy * sp * cr - sy * sr
 
-  // Main nozzle: tilts from aft (CTOL) toward down (VL)
-  let nozzleDown = vlFrac
+  // Main nozzle: tilts from aft (CTOL) toward down (VL) — forced aft on WOW CTOL
+  let nozzleDown = wowCtol ? 0 : vlFrac
   let nx = (1 - nozzleDown) * fxB + nozzleDown * ux
   let ny = (1 - nozzleDown) * fyB + nozzleDown * uy
   let nz = (1 - nozzleDown) * fzB + nozzleDown * uz
 
-  // Direct stick tip on nozzle (STOVL/VL) so pitch forward always does something
-  const tipBlend = mode === 'CTOL' ? 0.12 : 0.4
+  const tipBlend = wowCtol ? 0 : mode === 'CTOL' ? 0.12 : 0.4
   const tip = clamp(ctrl.cyclicPitch, -1, 1) * tipBlend
   nx += tip * fxB
   ny += tip * fyB
@@ -450,26 +467,46 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const mainThrust =
     F35_MAX_THRUST * ctrl.tcl * powerAvail * (0.75 + 0.25 * c.rotorRpm) * stovlBoost
 
-  // Lift fan — hold longer into STOVL until wing ready (v4 bridge)
+  // Lift fan — killed on WOW CTOL (no residual float / ground-effect hover)
   const airspeedEarly = Math.hypot(c.vx, c.vy, c.vz)
   const wingReadyEarly = clamp(airspeedEarly / F35_CONV_WING_SPEED, 0, 1)
   const fanFrac = clamp((vlFrac - 0.08) / 0.75, 0, 1)
-  // Don't dump fan solely because vector moved — keep residual until wing q is there
-  const fanKeep = Math.max(fanFrac, (1 - wingReadyEarly) * clamp(vlFrac / 0.35, 0, 1) * 0.55)
+  let fanKeep = Math.max(fanFrac, (1 - wingReadyEarly) * clamp(vlFrac / 0.35, 0, 1) * 0.55)
+  if (wowCtol) fanKeep = 0
   const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanKeep * powerAvail * (0.65 + 0.35 * c.rotorRpm)
-  const ge = 0.18 * Math.exp(-agl / 8) * fanKeep * (c.onGround ? 0.3 : 1)
+  const ge = wowCtol ? 0 : 0.18 * Math.exp(-agl / 8) * fanKeep * (c.onGround ? 0.3 : 1)
 
   let fx = nx * mainThrust + ux * fanThrust * (1 + ge)
   let fy = ny * mainThrust + uy * fanThrust * (1 + ge) - F35_MASS * GRAVITY
   let fz = nz * mainThrust + uz * fanThrust * (1 + ge)
 
-  if (mode === 'VL' || (mode === 'STOVL' && speedKt < 60)) {
+  // WOW CTOL: cancel any upward thrust / fan / GE so weight stays on wheels
+  if (wowCtol) {
+    const upThrust = Math.max(0, ny * mainThrust + uy * fanThrust * (1 + ge))
+    fy -= upThrust
+    // Throttle → forward accel along body (taxi / takeoff roll)
+    const rollPush = F35_MASS * (7.5 + ctrl.tcl * 14) * ctrl.tcl * powerAvail
+    fx += fxB * rollPush
+    fz += fzB * rollPush
+    // Parking brake holds until throttle breaks it
+    if (c.parkingBrake && ctrl.tcl < 0.12) {
+      fx -= c.vx * F35_MASS * 8
+      fz -= c.vz * F35_MASS * 8
+    } else if (c.parkingBrake && ctrl.tcl >= 0.12) {
+      c.parkingBrake = false
+    }
+  }
+
+  if (!wowCtol && (mode === 'VL' || (mode === 'STOVL' && speedKt < 60))) {
     fx += ux * ctrl.tcl * F35_MASS * 2.5 * stovlBlend * 0.15
   }
 
   const airspeed = Math.min(Math.hypot(c.vx, c.vy, c.vz), 180)
   const qDyn = 0.5 * AIR_DENSITY * airspeed * airspeed
-  const wingOn = clamp(1 - vlFrac * 0.65, 0.22, 1) * clamp(airspeed / 16, 0, 1)
+  // On WOW CTOL don't invent wing float at walking speed
+  const wingOn = wowCtol
+    ? clamp(1 - vlFrac * 0.65, 0.22, 1) * clamp(airspeed / 28, 0, 1)
+    : clamp(1 - vlFrac * 0.65, 0.22, 1) * clamp(airspeed / 16, 0, 1)
 
   if (wingOn > 0.02 && airspeed > 3) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
@@ -491,10 +528,12 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     c.aoa = c.pitch
   }
 
-  // Conversion lift bridge: vector tilting aft before wing carries
+  // Conversion lift bridge — never while WOW CTOL (kills leftover VL float)
   const wingReady = clamp(airspeed / F35_CONV_WING_SPEED, 0, 1) * clamp(1 - vlFrac * 0.7, 0.15, 1)
-  const tilted = clamp((0.95 - vlFrac) / 0.85, 0, 1) // 0 at VL → 1 toward CTOL
-  const inConvert = mode === 'STOVL' || (mode === 'CTOL' && vlFrac > 0.05) || (mode === 'VL' && vlFrac < 0.95)
+  const tilted = clamp((0.95 - vlFrac) / 0.85, 0, 1)
+  const inConvert =
+    !wowCtol &&
+    (mode === 'STOVL' || (mode === 'CTOL' && vlFrac > 0.05) || (mode === 'VL' && vlFrac < 0.95))
   if (inConvert) {
     const bridgeNeed = tilted * (1 - wingReady) * F35_CONV_BRIDGE
     fy += F35_MASS * GRAVITY * ctrl.tcl * powerAvail * bridgeNeed
@@ -505,7 +544,6 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     }
   }
 
-  // Parasite drag — lower bleed in STOVL convert (v4)
   const dragScale = (0.25 + vlFrac * 0.12) * (0.3 + airspeed * 0.0055)
   fx -= c.vx * F35_DRAG_H * F35_MASS * dragScale
   fz -= c.vz * F35_DRAG_H * F35_MASS * dragScale
@@ -533,9 +571,48 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   if (!Number.isFinite(c.z)) c.z = 0
   if (!Number.isFinite(c.aoa)) c.aoa = c.pitch
 
-  const contactH = c.gearDown ? F35_GEAR_H : F35_GEAR_H * 0.5
-  const plantThr = mode === 'VL' ? 0.55 : mode === 'STOVL' ? 0.38 : 0.22
-  plantGear(c, contactH, ctrl, plantThr, dt)
+  // —— Ground contact ——
+  if (wowCtol || (ctolVec && c.gearDown && c.y <= contactH + 0.15)) {
+    // Hard pin wheels to pavement in CTOL — no hover float
+    c.y = contactH
+    c.vy = 0
+    c.onGround = true
+
+    // Rolling friction (lighter when throttling so taxi works)
+    const rollMu = c.parkingBrake ? 14 : lerp(5.5, 1.1, clamp(ctrl.tcl, 0, 1))
+    c.vx *= Math.exp(-rollMu * dt)
+    c.vz *= Math.exp(-rollMu * dt)
+
+    // Nosewheel steering at low speed; rudder authority builds with roll speed
+    const steer = clamp(ctrl.yaw + ctrl.cyclicRoll * 0.55, -1, 1)
+    const noseAuth = clamp(1.15 - speedHoriz / 38, 0.12, 1) // strong when slow
+    const rudAuth = clamp(speedHoriz / 45, 0.15, 1)
+    const yawRateGnd = F35_YAW_RATE * (noseAuth * 1.35 + rudAuth * 0.85)
+    c.yaw = wrapAngle(c.yaw + steer * yawRateGnd * dt)
+
+    // Align velocity with heading when rolling (no sideways skate)
+    if (speedHoriz > 0.4) {
+      const wantVx = Math.sin(c.yaw) * speedHoriz
+      const wantVz = Math.cos(c.yaw) * speedHoriz
+      c.vx = lerp(c.vx, wantVx, 1 - Math.exp(-4 * dt))
+      c.vz = lerp(c.vz, wantVz, 1 - Math.exp(-4 * dt))
+    }
+
+    // Rotate / lift-off: enough speed + nose up + thrust → break WOW
+    const rotateReady = speedHoriz > 38 && c.pitch > 0.12 && ctrl.tcl > 0.55
+    if (rotateReady) {
+      c.onGround = false
+      c.vy = Math.max(c.vy, 1.2 + (ctrl.tcl - 0.55) * 4)
+      c.y = contactH + 0.05
+    }
+  } else if (!ctolVec && nearDeck && (mode === 'VL' || mode === 'STOVL')) {
+    // VL/STOVL hover-taxi: light plant, fan may hold off deck slightly
+    const plantThr = mode === 'VL' ? 0.55 : 0.38
+    plantGear(c, contactH, ctrl, plantThr, dt)
+  } else {
+    const plantThr = mode === 'VL' ? 0.55 : mode === 'STOVL' ? 0.38 : 0.18
+    plantGear(c, contactH, ctrl, plantThr, dt)
+  }
 
   if (mode === 'VL' && !c.onGround && ctrl.tcl < F35_HOVER_THR - 0.15 && experience === 'advanced') {
     c.vy -= 1.0 * dt
@@ -596,8 +673,8 @@ export function sanitizeCraft(c: Craft): boolean {
   c.yaw = Number.isFinite(c.yaw) ? wrapAngle(c.yaw) : 0
   c.aoa = 0
   c.rotorRpm = clamp(Number.isFinite(c.rotorRpm) ? c.rotorRpm : 0.2, 0, 1)
-  c.nacelleDeg = clamp(Number.isFinite(c.nacelleDeg) ? c.nacelleDeg : (c.kind === 'osprey' ? 90 : 0), 0, 90)
-  c.vectorPos = clamp(Number.isFinite(c.vectorPos) ? c.vectorPos : (c.kind === 'f35' ? 0.85 : 0), 0, 1)
+  c.nacelleDeg = clamp(Number.isFinite(c.nacelleDeg) ? c.nacelleDeg : 0, 0, 90)
+  c.vectorPos = clamp(Number.isFinite(c.vectorPos) ? c.vectorPos : 0, 0, 1)
   c.onGround = c.y <= gearH + 0.2
   return true
 }
