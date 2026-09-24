@@ -288,7 +288,8 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
 
   if (wingOn > 0.02 && airspeed > 2) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
-    const aoa = clamp(c.pitch - vPitch, -1.2, 1.2)
+    // Nose-up is negative pitch (same as thrust and the drawn nose). Wing must lift that way.
+    const aoa = clamp(-c.pitch - vPitch, -1.2, 1.2)
     c.aoa = aoa
     const cl = clamp(CL0 + CL_ALPHA * aoa + FLAP_CL * c.flaps, -1.2, 1.85)
     const cd = CD0 + CD_INDUCED * cl * cl + FLAP_CD * c.flaps
@@ -323,7 +324,8 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   }
 
   // Parasite drag — much lighter in CONV/APL (v4 energy retention)
-  const dragScale = (0.22 + helFrac * 0.18) * (0.32 + airspeed * 0.006)
+  const dragScale =
+    (0.22 + helFrac * 0.18) * (0.32 + airspeed * (aplFrac > 0.7 ? 0.0095 : 0.006))
   fx -= c.vx * DRAG_H * MASS * dragScale
   fz -= c.vz * DRAG_H * MASS * dragScale
   fy -= c.vy * DRAG_V * MASS * 0.08 * (0.4 + helFrac * 0.4)
@@ -535,7 +537,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     const upThrust = Math.max(0, ny * mainThrust + uy * fanThrust * (1 + ge))
     fy -= upThrust
     // v10: stronger takeoff-roll push — clear ≥80–90 kt at full THR
-    const rollPush = F35_MASS * (9.5 + ctrl.tcl * 17) * ctrl.tcl * powerAvail
+    const rollPush = F35_MASS * (6.5 + ctrl.tcl * 11) * ctrl.tcl * powerAvail
     fx += fxB * rollPush
     fz += fzB * rollPush
     // Parking brake holds until throttle breaks it

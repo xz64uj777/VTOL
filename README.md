@@ -37,6 +37,18 @@ v3–v9 still locked: Settings pauses until Resume · Hangar only in Settings ·
 
 v10 rotate, gear lock, EMER, and deck rules are unchanged.
 
+
+## Live fix — Osprey climb / cockpit
+
+| You said | This patch |
+|----------|------------|
+| After ~2000 ft the Osprey **stops climbing and sinks** | The wing was pulling **down** when the nose was up. Nose-up now makes lift. It keeps climbing. |
+| Speed number **doesn't drop** when it feels like it should | **SPD** is airspeed now (up/down counts). A climb bleeds it. A dive raises it. |
+| Acceleration is a bit **hot** | Airplane drag is a little higher. F-35 still gets past rotate, just not as violent. |
+| Craft looks thin. Want **in the seat** | Solid fuselage/wings. **Cam** once → **COCKPIT** (glare shield, nose, wings). Drag to look around. |
+
+Ramp plant and bank-matches-drift stay.
+
 ## Run
 
 ```bash

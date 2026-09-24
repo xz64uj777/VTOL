@@ -19,6 +19,16 @@ import type { Cam, Craft, Sim } from './types'
 type Pt = { x: number; y: number; z: number }
 type Vec2 = { x: number; y: number; d: number }
 
+function fillPoly(ctx: CanvasRenderingContext2D, pts: (Vec2 | null)[], color: string) {
+  if (pts.length < 3 || pts.some((p) => !p)) return
+  ctx.beginPath()
+  ctx.moveTo(pts[0]!.x, pts[0]!.y)
+  for (const p of pts) ctx.lineTo(p!.x, p!.y)
+  ctx.closePath()
+  ctx.fillStyle = color
+  ctx.fill()
+}
+
 function project(p: Pt, cam: Cam, w: number, h: number): Vec2 | null {
   const cy = Math.cos(cam.yaw)
   const sy = Math.sin(cam.yaw)
@@ -95,9 +105,34 @@ export class Renderer {
     this.buildings(ctx, sim, w, h, q.buildings)
     this.trees(ctx, sim, w, h, q.trees)
     if (q.particles > 0) this.particles(ctx, sim, w, h, dt, q.particles)
-    if (sim.craft.kind === 'f35') this.f35(ctx, sim.craft, sim.cam, w, h, q.shadows)
-    else this.osprey(ctx, sim.craft, sim.cam, w, h, q.shadows)
+    if (sim.craft.kind === 'f35') this.f35(ctx, sim.craft, sim.cam, w, h, q.shadows, sim.camMode === 'cockpit')
+    else this.osprey(ctx, sim.craft, sim.cam, w, h, q.shadows, sim.camMode === 'cockpit')
+    if (sim.camMode === 'cockpit') this.coaming(ctx, w, h)
     this.vignette(ctx, w, h)
+  }
+
+  /** Simple glare-shield so cockpit view reads as "in the seat", not a camera glued to the tail. */
+  private coaming(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    ctx.fillStyle = 'rgba(16, 18, 20, 0.94)'
+    ctx.beginPath()
+    ctx.moveTo(0, h)
+    ctx.lineTo(0, h * 0.78)
+    ctx.lineTo(w * 0.22, h * 0.74)
+    ctx.lineTo(w * 0.42, h * 0.66)
+    ctx.lineTo(w * 0.5, h * 0.64)
+    ctx.lineTo(w * 0.58, h * 0.66)
+    ctx.lineTo(w * 0.78, h * 0.74)
+    ctx.lineTo(w, h * 0.78)
+    ctx.lineTo(w, h)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(180, 190, 180, 0.35)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(w * 0.22, h * 0.74)
+    ctx.lineTo(w * 0.5, h * 0.64)
+    ctx.lineTo(w * 0.78, h * 0.74)
+    ctx.stroke()
   }
 
   private sky(ctx: CanvasRenderingContext2D, w: number, h: number, alt: number) {
@@ -821,7 +856,7 @@ export class Renderer {
     }
   }
 
-  private osprey(ctx: CanvasRenderingContext2D, craft: Craft, cam: Cam, w: number, h: number, shadows: boolean) {
+  private osprey(ctx: CanvasRenderingContext2D, craft: Craft, cam: Cam, w: number, h: number, shadows: boolean, inside = false) {
     const cy = Math.cos(craft.yaw)
     const sy = Math.sin(craft.yaw)
     const cp = Math.cos(craft.pitch)
@@ -854,6 +889,15 @@ export class Renderer {
     }
 
     const parts: { a: Pt; b: Pt; color: string; width: number }[] = []
+    const P = (x: number, y: number, z: number) => project(xf(x, y, z), cam, w, h)
+    if (!inside) {
+      fillPoly(ctx, [P(-0.9, 0.55, -3.8), P(0.9, 0.55, -3.8), P(0.45, 0.32, 4.1), P(-0.45, 0.32, 4.1)], 'rgba(122,128,118,0.95)')
+      fillPoly(ctx, [P(-0.75, 0.05, -3.4), P(0.75, 0.05, -3.4), P(0.35, -0.45, 3.4), P(-0.35, -0.45, 3.4)], 'rgba(62,66,60,0.92)')
+    } else {
+      fillPoly(ctx, [P(-0.35, 0.35, 2.2), P(0.35, 0.35, 2.2), P(0.12, 0.15, 5.4), P(-0.12, 0.15, 5.4)], 'rgba(140,146,136,0.95)')
+    }
+    fillPoly(ctx, [P(-7.6, 0.85, -0.9), P(7.6, 0.85, -0.9), P(6.2, 0.72, 1.6), P(-6.2, 0.72, 1.6)], 'rgba(108,114,104,0.9)')
+    fillPoly(ctx, [P(0, 0.45, -3.2), P(-1.7, 1.7, -5.1), P(1.7, 1.7, -5.1)], 'rgba(96,102,94,0.9)')
 
     // Landing gear
     if (craft.gearDown) {
@@ -973,7 +1017,7 @@ export class Renderer {
   }
 
 
-  private f35(ctx: CanvasRenderingContext2D, craft: Craft, cam: Cam, w: number, h: number, shadows: boolean) {
+  private f35(ctx: CanvasRenderingContext2D, craft: Craft, cam: Cam, w: number, h: number, shadows: boolean, inside = false) {
     const cy = Math.cos(craft.yaw)
     const sy = Math.sin(craft.yaw)
     const cp = Math.cos(craft.pitch)
@@ -1006,6 +1050,16 @@ export class Renderer {
     }
 
     const parts: { a: Pt; b: Pt; color: string; width: number }[] = []
+    const P = (x: number, y: number, z: number) => project(xf(x, y, z), cam, w, h)
+    if (!inside) {
+      fillPoly(ctx, [P(-0.7, 0.4, -3.6), P(0.7, 0.4, -3.6), P(0.28, 0.22, 5.2), P(-0.28, 0.22, 5.2)], 'rgba(150,158,164,0.95)')
+      fillPoly(ctx, [P(-0.55, 0.05, -3.2), P(0.55, 0.05, -3.2), P(0.22, -0.35, 4.2), P(-0.22, -0.35, 4.2)], 'rgba(70,76,82,0.92)')
+    } else {
+      fillPoly(ctx, [P(-0.28, 0.28, 1.8), P(0.28, 0.28, 1.8), P(0.08, 0.12, 6.2), P(-0.08, 0.12, 6.2)], 'rgba(168,176,182,0.95)')
+    }
+    fillPoly(ctx, [P(-5.6, 0.32, -0.4), P(5.6, 0.32, -0.4), P(4.2, 0.28, 2.0), P(-4.2, 0.28, 2.0)], 'rgba(130,138,144,0.9)')
+    fillPoly(ctx, [P(-1.5, 0.4, -2.6), P(-1.5, 2.05, -3.7), P(-0.7, 0.35, -2.4)], 'rgba(120,128,134,0.9)')
+    fillPoly(ctx, [P(1.5, 0.4, -2.6), P(1.5, 2.05, -3.7), P(0.7, 0.35, -2.4)], 'rgba(120,128,134,0.9)')
 
     if (craft.gearDown) {
       parts.push({ a: xf(-1.2, -1.7, 1.2), b: xf(-1.2, -0.2, 1.0), color: '#555', width: 2 })

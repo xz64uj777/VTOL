@@ -31,8 +31,28 @@ export function resetCamOffsets(cam: Cam): void {
   cam.pitchOff = 0
 }
 
+/** Body point → world. +Z nose, +Y up, +X right. Matches the drawn aircraft. */
+export function craftBodyPoint(craft: Craft, lx: number, ly: number, lz: number): { x: number; y: number; z: number } {
+  const cy = Math.cos(craft.yaw)
+  const sy = Math.sin(craft.yaw)
+  const cp = Math.cos(craft.pitch)
+  const sp = Math.sin(craft.pitch)
+  const cr = Math.cos(craft.roll)
+  const sr = Math.sin(craft.roll)
+  let x = lx * cr - ly * sr
+  let y = lx * sr + ly * cr
+  let z = lz
+  const y2 = y * cp - z * sp
+  const z2 = y * sp + z * cp
+  y = y2
+  z = z2
+  const x3 = x * cy + z * sy
+  const z3 = -x * sy + z * cy
+  return { x: craft.x + x3, y: craft.y + y, z: craft.z + z3 }
+}
+
 /**
- * Chase → Wing → Tower → Pad → Orbit.
+ * Chase → Cockpit → Wing → Tower → Pad → Orbit.
  * v10: remove altitude-linked height/shake; no micro-snap oscillation; heavier damp; no chase lead.
  * v9: chase stays above+behind (clamp y / pitch).
  * v7: touch yaw/pitch offsets; wing + tower modes.
@@ -63,6 +83,23 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   const yOff = cam.yawOff
   // Pitch offset: never allow touch drag to drop cam under craft
   const pOff = clamp(cam.pitchOff, -0.35, 0.45)
+
+  if (mode === 'cockpit') {
+    // Eyes in the cabin, looking out the nose. Touch drag looks around.
+    const eye = craftBodyPoint(craft, 0, 0.72, 1.15)
+    const look = craftBodyPoint(craft, yOff * 8, 0.42 + pOff * 5, 18)
+    cam.x = eye.x
+    cam.y = eye.y
+    cam.z = eye.z
+    const dx = look.x - eye.x
+    const dy = look.y - eye.y
+    const dz = look.z - eye.z
+    const horiz = Math.hypot(dx, dz) || 1
+    cam.yaw = Math.atan2(dx, dz)
+    cam.pitch = clamp(Math.atan2(dy, horiz), -0.7, 0.55)
+    cam.dist = 2
+    return
+  }
 
   if (mode === 'chase') {
     const back = 20 + clamp(speed * 0.4, 0, 16)
@@ -262,10 +299,11 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   }
 }
 
-export const CAM_ORDER: CamMode[] = ['chase', 'wing', 'tower', 'pad', 'orbit']
+export const CAM_ORDER: CamMode[] = ['chase', 'cockpit', 'wing', 'tower', 'pad', 'orbit']
 
 export const CAM_LABEL: Record<CamMode, string> = {
   chase: 'CHASE',
+  cockpit: 'COCKPIT',
   wing: 'WING',
   tower: 'TOWER',
   pad: 'PAD',

@@ -1,8 +1,8 @@
 import type { QualityKey } from './config'
 
 export type Phase = 'hangar' | 'flight'
-/** Camera modes — chase, wing/side, tower, pad, orbit. */
-export type CamMode = 'chase' | 'wing' | 'tower' | 'pad' | 'orbit'
+/** Camera modes — chase, cockpit, wing/side, tower, pad, orbit. */
+export type CamMode = 'chase' | 'cockpit' | 'wing' | 'tower' | 'pad' | 'orbit'
 export type BirdKind = 'osprey' | 'f35'
 
 /** Osprey flight mode from nacelle. */

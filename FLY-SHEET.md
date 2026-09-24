@@ -37,3 +37,9 @@ Phone/tablet, landscape. Pass/fail by **feel**.
 2. Add a little power and roll **right** (or yaw right). It should go **right**, same way the nose/wing goes.
 3. **Shout if:** it still skates with the knobs at zero, or right still slides left.
 
+## Patch — climb, speed, cockpit
+
+1. Osprey, nacelles forward, climb past **2000 ft**. It should **keep going up**, not sag.
+2. Pull the nose up. **SPD** should ease off. Point down and it should rise.
+3. Tap **Cam** once. You should be in the seat: nose and wings ahead, panel at the bottom.
+4. **Shout if** it still dies around 2000 ft, the speed number stays glued while you're falling, or cockpit is just the old chase cam.

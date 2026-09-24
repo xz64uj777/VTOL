@@ -222,7 +222,8 @@ export function hudFrom(sim: Sim): Hud {
   const altRaw = Math.max(0, finiteOr(c.y, gearH) - gearH)
   const alt = Number.isFinite(altRaw) ? altRaw : 0
   const altFt = alt * 3.28084
-  const spd = Math.hypot(finiteOr(c.vx, 0), finiteOr(c.vz, 0)) * 1.94384
+  const spd =
+    Math.hypot(finiteOr(c.vx, 0), finiteOr(c.vy, 0), finiteOr(c.vz, 0)) * 1.94384
   const aoaDeg = (() => {
     const air = Math.hypot(finiteOr(c.vx, 0), finiteOr(c.vy, 0), finiteOr(c.vz, 0))
     if (air < 8) return (finiteOr(c.pitch, 0) * 180) / Math.PI
