@@ -43,3 +43,10 @@ Phone/tablet, landscape. Pass/fail by **feel**.
 2. Pull the nose up. **SPD** should ease off. Point down and it should rise.
 3. Tap **Cam** once. You should be in the seat: nose and wings ahead, panel at the bottom.
 4. **Shout if** it still dies around 2000 ft, the speed number stays glued while you're falling, or cockpit is just the old chase cam.
+
+## Patch — runway, tilt, open sky
+
+1. Sit on the runway. Power at 0. The wings should stay level. No creep.
+2. Tilt ON, then **Cal** while holding the phone the way you fly. Tip the top up — nose up. Tip right — bank right.
+3. Climb past 1500 ft and keep going. The ground should drop away, not rise up to meet you. **SPD** can stay high while you climb; altitude should too.
+4. **Shout if** tilt is still backwards after Cal, or the hills grow up to your altitude.

@@ -90,9 +90,9 @@ export function sampleControls(
   let stickRoll = applyDeadzone(input.stickX) * sens
   let yaw = applyDeadzone(input.yawStick) * sens
 
-  // Optional phone tilt → cyclic (additive with stick, then clamp)
+  // Phone tilt. Axes follow the SCREEN (landscape), not the phone's portrait top.
+  // +stickPitch = stick back (nose up after Casual). +stickRoll = stick right.
   if (prefs.tiltCyclic && input.gyroActive && prefs.gyroReady) {
-    // Ramp only after a true signal timeout; a brief gap keeps the last good sample at full authority.
     input.gyroBlend = Math.min(1, input.gyroBlend + dt / 0.32)
     const maxTilt = 28
     const angles = tiltAngles(input.gyroBeta, input.gyroGamma, prefs.gyroZeroBeta, prefs.gyroZeroGamma, input.gyroScreen)
