@@ -76,10 +76,10 @@ export function loadPrefs(): FlightPrefs {
       pitchMode: p.pitchMode === 'realistic' ? 'realistic' : 'casual',
       invertPitch: !!p.invertPitch,
       invertRoll: !!p.invertRoll,
-      tiltCyclic: !!p.tiltCyclic,
+      tiltCyclic: false,
       gyroZeroBeta: typeof p.gyroZeroBeta === 'number' ? p.gyroZeroBeta : 0,
       gyroZeroGamma: typeof p.gyroZeroGamma === 'number' ? p.gyroZeroGamma : 0,
-      gyroReady: !!p.gyroReady,
+      gyroReady: false,
     }
   } catch {
     return base
