@@ -30,3 +30,10 @@ Phone/tablet, landscape. Pass/fail by **feel**.
 - Sound goes static
 - Hangar is back next to Pause
 - FL looks like an error light and you can’t tell what it means
+
+## Patch — ramp float / wrong-way slide
+
+1. Sit on the runway or pad. **Don't touch power.** The bird should **not** creep or spin.
+2. Add a little power and roll **right** (or yaw right). It should go **right**, same way the nose/wing goes.
+3. **Shout if:** it still skates with the knobs at zero, or right still slides left.
+

@@ -27,6 +27,16 @@ v3–v9 still locked: Settings pauses until Resume · Hangar only in Settings ·
 
 ---
 
+
+## Live fix after v10 (Kyle, no new zip)
+
+| You said | This patch |
+|----------|------------|
+| Both birds **creep / yaw on the ramp with power at 0** | Parking brake holds. Stopped + no throttle = sit still. Nosewheel only steers once you're rolling |
+| **Roll right, drift left** | Bank now slides toward the low wing. Stick right on the ground turns the nose right |
+
+v10 rotate, gear lock, EMER, and deck rules are unchanged.
+
 ## Run
 
 ```bash

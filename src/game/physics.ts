@@ -223,6 +223,9 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   let yawCmd = ctrl.yaw * yawRate
   if (helFrac > 0.4) yawCmd += ctrl.tcl * 0.06 * ctrl.cyclicRoll * helFrac
   else yawCmd *= clamp(speedHoriz / 40, 0.15, 1)
+  // Airplane on the ramp: no pedal-spin and no skate with the brake set / power off.
+  const deckAirplane = c.onGround && helFrac < 0.35 && speedHoriz < 1.5 && ctrl.tcl < 0.1
+  if (deckAirplane) yawCmd = 0
   if (c.failAsymmetric) rollCmd += 0.25
 
   c.pitch += pitchCmd * dt
@@ -250,9 +253,10 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const fxB = sy * cp
   const fyB = -sp
   const fzB = cy * cp
-  const ux = sy * sp * cr + cy * sr
+  // +roll raises the right wing (bank left). Drift follows the LOW wing.
+  const ux = sy * sp * cr - cy * sr
   const uy = cp * cr
-  const uz = cy * sp * cr - sy * sr
+  const uz = cy * sp * cr + sy * sr
 
   let tx = Math.sin(nacRad) * ux + Math.cos(nacRad) * fxB
   let ty = Math.sin(nacRad) * uy + Math.cos(nacRad) * fyB
@@ -354,6 +358,21 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const contactH = c.gearDown ? GEAR_H : GEAR_H * 0.55
   const plantThr = mode === 'HEL' ? 0.55 : 0.25
   plantGear(c, contactH, ctrl, plantThr, dt)
+
+  // Wheels, not a hover: parking brake holds, and airplane-mode lateral skate is killed.
+  if (c.onGround && helFrac < 0.45) {
+    if (c.parkingBrake && ctrl.tcl < 0.12) {
+      c.vx = 0
+      c.vz = 0
+    } else if (c.parkingBrake && ctrl.tcl >= 0.12) {
+      c.parkingBrake = false
+    }
+    const fwdX = Math.sin(c.yaw)
+    const fwdZ = Math.cos(c.yaw)
+    const fwd = c.vx * fwdX + c.vz * fwdZ
+    c.vx = fwd * fwdX
+    c.vz = fwd * fwdZ
+  }
   return envelopeWarn
 }
 
@@ -472,9 +491,10 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const fxB = sy * cp
   const fyB = -sp
   const fzB = cy * cp
-  const ux = sy * sp * cr + cy * sr
+  // +roll raises the right wing (bank left). Drift follows the LOW wing.
+  const ux = sy * sp * cr - cy * sr
   const uy = cp * cr
-  const uz = cy * sp * cr - sy * sr
+  const uz = cy * sp * cr + sy * sr
 
   // Main nozzle: tilts from aft (CTOL) toward down (VL) — forced aft on WOW CTOL
   let nozzleDown = wowCtol ? 0 : vlFrac
@@ -623,12 +643,15 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
       c.vz = 0
     }
 
-    // Nosewheel steering at low speed; rudder builds with roll speed
-    const steer = clamp(ctrl.yaw + ctrl.cyclicRoll * 0.55, -1, 1)
-    const noseAuth = clamp(1.15 - speedHoriz / 38, 0.12, 1)
+    // Nosewheel only bites when the jet is actually rolling. Stopped + no power = sit still.
+    // cyclicRoll is already casual-flipped (stick right is negative) — negate so stick right yaws nose right.
+    const steer = clamp(ctrl.yaw - ctrl.cyclicRoll * 0.55, -1, 1)
+    const noseAuth = clamp(speedHoriz / 7, 0, 1)
     const rudAuth = clamp(speedHoriz / 45, 0.15, 1)
     const yawRateGnd = F35_YAW_RATE * (noseAuth * 1.35 + rudAuth * 0.85)
-    c.yaw = wrapAngle(c.yaw + steer * yawRateGnd * dt)
+    if (speedHoriz > 0.8 || ctrl.tcl > 0.15) {
+      c.yaw = wrapAngle(c.yaw + steer * yawRateGnd * dt)
+    }
 
     // Align velocity with heading when rolling (no sideways skate)
     if (speedHoriz > 0.4) {
