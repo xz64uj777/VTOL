@@ -1,4 +1,4 @@
-# Osprey Flight v10
+# Osprey Flight v11
 
 Phone/tablet flight sim — **Osprey** + **F-35**. Flight / controls / physics.
 
@@ -55,3 +55,22 @@ Ramp plant and bank-matches-drift stay.
 npm install
 npm run dev
 ```
+
+## v11 — tilt and control reliability
+
+- Screen-relative gravity mapping supports portrait and both landscape directions,
+  avoids Euler wrap spikes, and does not use compass heading to steer.
+- Cal waits for a stable pose for 600 ms. Calibration is session-only; tap Tilt
+  each flight session while holding the phone in your comfortable flying position.
+- Screen rotation pauses and recalibrates. Tap Resume when ready.
+- Tilt is smoothed; stale steering fades between 250 ms and 1 second. Touch cyclic
+  returns on delayed/lost motion. Fresh samples recover with the same neutral pose.
+- Pitch mode no longer reverses roll. Invert roll remains an explicit option.
+- Relative and absolute sensor feeds no longer fight each other; invalid readings
+  are ignored. Unsupported/insecure sensor contexts fall back to touch.
+- Switching apps pauses and clears held controls; returning requires Resume.
+- Multiple fingers cannot steal an already held control.
+
+Validation: `npm test` covers orientation mapping, wrapping, independent yaw/tilt,
+control inversion, stale samples, unsupported sensors, and duplicate sensor feeds.
+`npm run build` type-checks and builds the app. Real-device feel still needs testing.

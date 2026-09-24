@@ -8,6 +8,7 @@ import {
   gyroIsSustained,
   requestGyroPermission,
   resetGyroTracking,
+  resetSpringSticks,
   sampleControls,
   type GyroBind,
 } from '../game/input'
@@ -23,6 +24,7 @@ import {
   type SensKey,
   type TiltHeartbeat,
 } from '../game/prefs'
+import { tiltAngles } from '../game/tilt'
 import { Renderer } from '../game/render'
 import {
   createSim,
@@ -66,6 +68,8 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   const audioRef = useRef(new FlightAudio())
   const gyroRef = useRef<GyroBind | null>(null)
   const pendingCalRef = useRef(false)
+  const calStartRef = useRef(0)
+  const calPoseRef = useRef({ beta: 0, gamma: 0 })
   const fallbackTriedRef = useRef(false)
   const tiltOnAtRef = useRef(0)
   const noSignalStickyRef = useRef(false)
@@ -179,7 +183,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       const sim = simRef.current
-      sim.paused = pausedRef.current
+      sim.paused = pausedRef.current || menuOpenRef.current || showSettingsRef.current
       const controls = sampleControls(
         inputRef.current,
         sim.controls,
@@ -219,11 +223,12 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         const p = prefsRef.current
         const inp = inputRef.current
         const gyroLevel = p.tiltCyclic && p.gyroReady && inp.gyroActive
+        const angles = tiltAngles(inp.gyroBeta, inp.gyroGamma, p.gyroZeroBeta, p.gyroZeroGamma, inp.gyroScreen)
         const pitchDeg = gyroLevel
-          ? inp.gyroBeta - p.gyroZeroBeta
+          ? angles.pitch
           : (sim.craft.pitch * 180) / Math.PI
         const bankDeg = gyroLevel
-          ? inp.gyroGamma - p.gyroZeroGamma
+          ? angles.roll
           : (sim.craft.roll * 180) / Math.PI
         setLevelReading({
           pitchDeg,
@@ -237,6 +242,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     raf = requestAnimationFrame(loop)
 
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || (e.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName))) return
       if (e.code === 'KeyC') cycleCamera(simRef.current)
       if (e.code === 'KeyP' || e.code === 'Escape') {
         if (e.code === 'Escape' && (menuOpenRef.current || showSettingsRef.current)) {
@@ -263,6 +269,26 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         })
       }
     }
+    const suspend = () => {
+      pausedRef.current = true
+      setPaused(true)
+      inputRef.current.keys.clear()
+      resetSpringSticks(inputRef.current)
+      audioRef.current.mute(true)
+    }
+    const visibility = () => { if (document.hidden) suspend() }
+    const rotate = () => {
+      if (!prefsRef.current.tiltCyclic) return
+      suspend()
+      patchPrefs({ gyroReady: false })
+      calFrozenRef.current = false
+      pendingCalRef.current = true
+      calStartRef.current = 0
+      setCalStatus('Screen rotated — hold still to calibrate')
+    }
+    document.addEventListener('visibilitychange', visibility)
+    window.addEventListener('blur', suspend)
+    window.screen.orientation?.addEventListener('change', rotate)
     window.addEventListener('keydown', onKey)
 
     return () => {
@@ -271,6 +297,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       gyro.stop()
       gyroRef.current = null
       window.removeEventListener('keydown', onKey)
+      document.removeEventListener('visibilitychange', visibility)
+      window.removeEventListener('blur', suspend)
+      window.screen.orientation?.removeEventListener('change', rotate)
       audioRef.current.stop()
     }
     // Restart only when bird/experience/quality change (new sortie)
@@ -304,7 +333,17 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
         setTiltSticky(null)
         setTiltHb('live')
         if (pendingCalRef.current) {
-          // Explicit Cal / first arm only: write the zero once, then freeze it.
+          const movement = tiltAngles(input.gyroBeta, input.gyroGamma, calPoseRef.current.beta, calPoseRef.current.gamma, input.gyroScreen)
+          if (!calStartRef.current || Math.hypot(movement.pitch, movement.roll) > 1.5) {
+            calStartRef.current = now
+            calPoseRef.current = { beta: input.gyroBeta, gamma: input.gyroGamma }
+            setCalStatus('Hold still…')
+            return
+          }
+          if (now - calStartRef.current < 600) return
+          input.gyroPitch = 0
+          input.gyroRoll = 0
+          // Freeze only after a stable pose, never while the phone is moving.
           pendingCalRef.current = false
           calFrozenRef.current = true
           reconnectNeedsSlewRef.current = false
@@ -316,7 +355,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           })
           setCalStatus('Calibrated')
           window.setTimeout(() => setCalStatus(null), 1400)
-        } else if (calFrozenRef.current && !prefsNow.gyroReady) {
+        } else if (calFrozenRef.current && !pendingCalRef.current && !prefsNow.gyroReady) {
           // Real timeout recovered: retain frozen zeros and ease current pose in over 320 ms.
           input.gyroBlend = reconnectNeedsSlewRef.current ? 0 : 1
           reconnectNeedsSlewRef.current = false
@@ -328,11 +367,10 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       const lockedBefore = gyroEverLiveRef.current || calFrozenRef.current
       const inHoldover = lockedBefore && !reconnectNeedsSlewRef.current && age < GYRO_HOLDOVER_MS
       if (inHoldover) {
-        // Stay live: keep applying last good β/γ and keep gyroReady through holdover.
-        // Do NOT clear gyroReady on brief gaps (convert load often throttles orientation).
-        setTiltHb('live')
-        setTiltSticky(null)
-        if (calFrozenRef.current && !prefsNow.gyroReady) {
+        // Preserve calibration through gaps; sampleControls fades stale authority.
+        setTiltHb(age < GYRO_LIVE_MS ? 'live' : 'pending')
+        setTiltSticky(age < GYRO_LIVE_MS ? null : 'Motion delayed — touch stick available')
+        if (calFrozenRef.current && !pendingCalRef.current && !prefsNow.gyroReady) {
           patchPrefs({ gyroReady: true })
         }
         // Re-arm absolute+relative listeners if silence >1s (phone may have dropped stream).
@@ -477,6 +515,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     resetGyroTracking(inputRef.current)
     fallbackTriedRef.current = false
     pendingCalRef.current = true
+    calStartRef.current = 0
     noSignalStickyRef.current = false
     gyroEverLiveRef.current = false
     reconnectNeedsSlewRef.current = false
@@ -487,6 +526,8 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
     setCalStatus('Hold still…')
     const perm = await requestGyroPermission()
     if (perm === 'denied' || perm === 'unsupported') {
+      pendingCalRef.current = false
+      patchPrefs({ tiltCyclic: false, gyroReady: false })
       noSignalStickyRef.current = true
       setTiltHb('no-signal')
       setTiltSticky(TILT_NO_SIGNAL_HINT)
@@ -504,29 +545,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       return
     }
     pendingCalRef.current = true
+    calStartRef.current = 0
+    patchPrefs({ gyroReady: false })
     setCalStatus('Hold still…')
-    window.setTimeout(() => {
-      if (!pendingCalRef.current) return
-      if (!gyroIsSustained(inputRef.current)) {
-        pendingCalRef.current = false
-        noSignalStickyRef.current = true
-        setTiltHb('no-signal')
-        setTiltSticky(TILT_NO_SIGNAL_HINT)
-        return
-      }
-      const inp = inputRef.current
-      pendingCalRef.current = false
-      calFrozenRef.current = true
-      inp.gyroBlend = 1
-      reconnectNeedsSlewRef.current = false
-      patchPrefs({
-        gyroReady: true,
-        gyroZeroBeta: inp.gyroBeta,
-        gyroZeroGamma: inp.gyroGamma,
-      })
-      setCalStatus('Calibrated')
-      window.setTimeout(() => setCalStatus(null), 1400)
-    }, 400)
   }
 
   const initialMode = 0 // cold: NAC APL / VEC CTOL
@@ -662,7 +683,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
           <p className="settings-hint">
             Recalibrate only when <strong>Tilt · live</strong> and phone is wings-level (see Level cue).
             Zero freezes after Cal — no mid-flight auto-recal. Closing Settings does not resume —
-            tap Resume. Tilt ON hides left CYC stick. Laptops have no gyro — use a phone for Tilt.
+            tap Resume. The CYC stick returns if motion is delayed. Screen rotation pauses and recalibrates. Laptops have no gyro — use a phone for Tilt.
           </p>
           {tiltSticky && <p className="settings-hint tilt-sticky-hint">{tiltSticky}</p>}
           <div className="settings-row">
@@ -716,7 +737,7 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
       <VirtualControls
         input={inputRef.current}
         bird={bird}
-        tiltCyclic={prefs.tiltCyclic}
+        tiltCyclic={prefs.tiltCyclic && prefs.gyroReady && tiltHb === 'live'}
         initialTcl={0}
         initialMode={initialMode}
         syncKey={controlsSync}

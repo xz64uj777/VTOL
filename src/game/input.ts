@@ -1,3 +1,4 @@
+import { tiltAngles } from './tilt'
 import type { BirdKind, Controls } from './types'
 import { clamp } from './physics'
 import { applyDeadzone, SENS_SCALE, type FlightPrefs } from './prefs'
@@ -26,6 +27,9 @@ export type InputState = {
   gyroEvents: number[]
   /** 0..1 reconnect ramp; prevents a resumed phone pose from spiking cyclic. */
   gyroBlend: number
+  gyroScreen: number
+  gyroPitch: number
+  gyroRoll: number
 }
 
 export function createInput(): InputState {
@@ -44,6 +48,9 @@ export function createInput(): InputState {
     gyroLastMs: 0,
     gyroEvents: [],
     gyroBlend: 1,
+    gyroScreen: 0,
+    gyroPitch: 0,
+    gyroRoll: 0,
   }
 }
 
@@ -75,9 +82,9 @@ export function sampleControls(
   const k = input.keys
   const sens = SENS_SCALE[prefs.sens]
   const casual = prefs.pitchMode !== 'realistic'
-  // Casual: flip both axes so stick-up = nose UP, stick-left = bank LEFT
+  // Pitch mode changes pitch only; right always banks right unless explicitly inverted.
   const pitchSign = (casual ? -1 : 1) * (prefs.invertPitch ? -1 : 1)
-  const rollSign = (casual ? -1 : 1) * (prefs.invertRoll ? -1 : 1)
+  const rollSign = -1 * (prefs.invertRoll ? -1 : 1)
 
   let stickPitch = applyDeadzone(input.stickY) * sens
   let stickRoll = applyDeadzone(input.stickX) * sens
@@ -88,12 +95,15 @@ export function sampleControls(
     // Ramp only after a true signal timeout; a brief gap keeps the last good sample at full authority.
     input.gyroBlend = Math.min(1, input.gyroBlend + dt / 0.32)
     const maxTilt = 28
-    const dBeta = input.gyroBeta - prefs.gyroZeroBeta
-    const dGamma = input.gyroGamma - prefs.gyroZeroGamma
-    let gyPitch = clamp(dBeta / maxTilt, -1, 1) * sens * input.gyroBlend
-    let gyRoll = clamp(dGamma / maxTilt, -1, 1) * sens * input.gyroBlend
-    gyPitch = applyDeadzone(gyPitch, 0.06)
-    gyRoll = applyDeadzone(gyRoll, 0.06)
+    const angles = tiltAngles(input.gyroBeta, input.gyroGamma, prefs.gyroZeroBeta, prefs.gyroZeroGamma, input.gyroScreen)
+    // Brief gaps retain authority; stale samples fade to neutral instead of holding a turn.
+    const age = Math.max(0, performance.now() - input.gyroLastMs)
+    const freshness = clamp(1 - (age - 250) / 750, 0, 1)
+    const alpha = 1 - Math.exp(-Math.max(0, dt) / 0.08)
+    input.gyroPitch += (angles.pitch - input.gyroPitch) * alpha
+    input.gyroRoll += (angles.roll - input.gyroRoll) * alpha
+    const gyPitch = applyDeadzone(clamp(input.gyroPitch / maxTilt, -1, 1), 0.06) * sens * input.gyroBlend * freshness
+    const gyRoll = applyDeadzone(clamp(input.gyroRoll / maxTilt, -1, 1), 0.06) * sens * input.gyroBlend * freshness
     stickPitch += gyPitch
     stickRoll += gyRoll
   }
@@ -195,7 +205,9 @@ export function bindKeyboard(input: InputState, target: Window | HTMLElement = w
 }
 
 export async function requestGyroPermission(): Promise<'ok' | 'denied' | 'unsupported'> {
-  const DOE = DeviceOrientationEvent as unknown as {
+  if (typeof window.DeviceOrientationEvent === 'undefined') return 'unsupported'
+  if (!window.isSecureContext) return 'unsupported'
+  const DOE = window.DeviceOrientationEvent as unknown as {
     requestPermission?: () => Promise<'granted' | 'denied'>
   }
   if (typeof DOE.requestPermission === 'function') {
@@ -216,7 +228,8 @@ export type GyroBind = {
 }
 
 function applyOrient(input: InputState, beta: number | null, gamma: number | null): void {
-  if (beta == null || gamma == null) return
+  if (beta == null || gamma == null || !Number.isFinite(beta) || !Number.isFinite(gamma)) return
+  input.gyroScreen = window.screen.orientation?.angle ?? (window as Window & { orientation?: number }).orientation ?? 0
   const now = performance.now()
   input.gyroBeta = beta
   input.gyroGamma = gamma
@@ -231,10 +244,15 @@ function applyOrient(input: InputState, beta: number | null, gamma: number | nul
 
 /** Bind deviceorientation → input.gyro*. Caller manages prefs.tiltCyclic / gyroReady. */
 export function bindGyro(input: InputState): GyroBind {
-  const onOrient = (e: DeviceOrientationEvent) => applyOrient(input, e.beta, e.gamma)
+  let relativeAt = -Infinity
+  const onOrient = (e: DeviceOrientationEvent) => {
+    if (e.beta == null || e.gamma == null || !Number.isFinite(e.beta) || !Number.isFinite(e.gamma)) return
+    relativeAt = performance.now()
+    applyOrient(input, e.beta, e.gamma)
+  }
   const onAbsolute = (e: Event) => {
     const ev = e as DeviceOrientationEvent
-    applyOrient(input, ev.beta, ev.gamma)
+    if (performance.now() - relativeAt > 1000) applyOrient(input, ev.beta, ev.gamma)
   }
 
   const attach = () => {
@@ -286,5 +304,7 @@ export function resetGyroTracking(input: InputState): void {
   input.gyroActive = false
   input.gyroLastMs = 0
   input.gyroEvents.length = 0
-  input.gyroBlend = 1
+  input.gyroBlend = 0
+  input.gyroPitch = 0
+  input.gyroRoll = 0
 }

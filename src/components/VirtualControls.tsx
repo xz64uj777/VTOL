@@ -147,6 +147,7 @@ export function VirtualControls({
   }
 
   const onCyclicStart = (e: React.PointerEvent) => {
+    if (cyclicId.current !== null) return
     e.preventDefault()
     const el = cyclicRef.current
     if (!el) return
@@ -170,6 +171,7 @@ export function VirtualControls({
   }
 
   const onYawStart = (e: React.PointerEvent) => {
+    if (yawId.current !== null) return
     e.preventDefault()
     const el = yawRef.current
     if (!el) return
@@ -202,6 +204,7 @@ export function VirtualControls({
   }
 
   const onTclStart = (e: React.PointerEvent) => {
+    if (tclId.current !== null) return
     e.preventDefault()
     const el = tclRef.current
     if (!el) return
@@ -229,6 +232,7 @@ export function VirtualControls({
   }
 
   const onModeStart = (e: React.PointerEvent) => {
+    if (modeId.current !== null) return
     e.preventDefault()
     const el = modeRef.current
     if (!el) return
@@ -311,6 +315,7 @@ export function VirtualControls({
           onPointerMove={onTclMove}
           onPointerUp={onTclEnd}
           onPointerCancel={onTclEnd}
+          onLostPointerCapture={onTclEnd}
         >
           <div className="slider-label">{powerLabel}</div>
           <div className="slider-track" />
@@ -323,6 +328,7 @@ export function VirtualControls({
           onPointerMove={onModeMove}
           onPointerUp={onModeEnd}
           onPointerCancel={onModeEnd}
+          onLostPointerCapture={onModeEnd}
         >
           <div className="slider-label">{modeLabel}</div>
           <div className="slider-hi">{modeHi}</div>
