@@ -223,9 +223,14 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   let yawCmd = ctrl.yaw * yawRate
   if (helFrac > 0.4) yawCmd += ctrl.tcl * 0.06 * ctrl.cyclicRoll * helFrac
   else yawCmd *= clamp(speedHoriz / 40, 0.15, 1)
-  // Airplane on the ramp: no pedal-spin and no skate with the brake set / power off.
+  // Airplane on the ramp: wings stay level, no pedal-spin, no skate with the brake set.
   const deckAirplane = c.onGround && helFrac < 0.35 && speedHoriz < 1.5 && ctrl.tcl < 0.1
   if (deckAirplane) yawCmd = 0
+  if (c.onGround && helFrac < 0.4) {
+    rollCmd = 0
+    const pitchAuth = clamp((speedHoriz - 14) / 22, 0, 1)
+    pitchCmd *= 0.1 + 0.9 * pitchAuth
+  }
   if (c.failAsymmetric) rollCmd += 0.25
 
   c.pitch += pitchCmd * dt
@@ -241,7 +246,7 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
   const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
   if (!stickPitchLive) c.pitch *= Math.exp(-0.22 * dt)
-  if (!stickRollLive) c.roll *= Math.exp(-0.28 * dt)
+  if (!stickRollLive || (c.onGround && helFrac < 0.4)) c.roll *= Math.exp(-6 * dt)
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -442,11 +447,10 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     envelopeWarn = 'CTOL — keep speed / AoA'
   }
 
-  // Attitude — nosewheel / rudder on ground handled after forces
-  // v10: F-35 inverts cyclic→attitude vs Osprey so Casual stick-up (cyclicPitch=-1)
-  // raises +pitch (rotate gate + AoA). Realistic stick-up still noses down.
+  // Attitude — same as Osprey and the drawing: negative pitch = nose UP.
+  // Casual stick-up is cyclicPitch < 0, so it raises the nose, the thrust, and the wing.
   const noseUpCmd = -ctrl.cyclicPitch
-  const pitchCmd = noseUpCmd * F35_PITCH_RATE
+  const pitchCmd = ctrl.cyclicPitch * F35_PITCH_RATE
   let rollCmd = ctrl.cyclicRoll * F35_ROLL_RATE
   let yawCmd = ctrl.yaw * F35_YAW_RATE * (mode === 'CTOL' ? clamp(speedHoriz / 50, 0.2, 1) : 1)
   if (c.failAsymmetric) rollCmd += 0.2
@@ -562,7 +566,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
 
   if (wingOn > 0.02 && airspeed > 3) {
     const vPitch = Math.atan2(-c.vy, Math.max(1, speedHoriz))
-    const aoa = clamp(c.pitch - vPitch, -1.2, 1.2)
+    const aoa = clamp(-c.pitch - vPitch, -1.2, 1.2)
     c.aoa = aoa
     const cl = clamp(F35_CL0 + F35_CL * aoa + FLAP_CL * c.flaps * 0.8, -1.1, 1.7)
     const cd = F35_CD0 + 0.055 * cl * cl + FLAP_CD * c.flaps * 0.65
@@ -666,7 +670,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     // Leave ground ONLY with clear rotate criteria (hysteresis — no flicker)
     const rotateReady =
       speedHoriz > F35_CTOL_ROTATE_SPEED &&
-      c.pitch > F35_CTOL_ROTATE_PITCH &&
+      c.pitch < -F35_CTOL_ROTATE_PITCH &&
       ctrl.tcl > F35_CTOL_ROTATE_THR
     if (rotateReady) {
       c.onGround = false

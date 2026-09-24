@@ -49,6 +49,16 @@ v10 rotate, gear lock, EMER, and deck rules are unchanged.
 
 Ramp plant and bank-matches-drift stay.
 
+
+## Live fix — open world, tilt, runway
+
+| You said | This patch |
+|----------|------------|
+| Both birds still wrong **on the runway** | Wings stay level at zero power. They don't bank or skate in place. |
+| **Tilt** is funny on both | Tilt follows the **screen**. In landscape, tip the top of the phone up = nose up. Tip right = bank right. Hit **Cal** once after turning Tilt on. |
+| Can't get above ~1500 ft. Altitude falls, speed doesn't | Nose-up now lifts **both** birds (the jet was pointing thrust down). |
+| Feels like a **landscape ceiling**. Want open world | Hills stay a fixed height. Clouds sit at fixed heights. The ground does not rise with you. Fly as far as you want — countryside keeps going. |
+
 ## Run
 
 ```bash

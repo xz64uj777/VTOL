@@ -83,17 +83,16 @@ export function sampleControls(
   let stickRoll = applyDeadzone(input.stickX) * sens
   let yaw = applyDeadzone(input.yawStick) * sens
 
-  // Optional phone tilt → cyclic (additive with stick, then clamp)
+  // Phone tilt. Axes follow the SCREEN (landscape), not the phone's portrait top.
+  // +stickPitch = stick back (nose up after Casual). +stickRoll = stick right.
   if (prefs.tiltCyclic && input.gyroActive && prefs.gyroReady) {
-    // Ramp only after a true signal timeout; a brief gap keeps the last good sample at full authority.
     input.gyroBlend = Math.min(1, input.gyroBlend + dt / 0.32)
     const maxTilt = 28
-    const dBeta = input.gyroBeta - prefs.gyroZeroBeta
-    const dGamma = input.gyroGamma - prefs.gyroZeroGamma
-    let gyPitch = clamp(dBeta / maxTilt, -1, 1) * sens * input.gyroBlend
-    let gyRoll = clamp(dGamma / maxTilt, -1, 1) * sens * input.gyroBlend
-    gyPitch = applyDeadzone(gyPitch, 0.06)
-    gyRoll = applyDeadzone(gyRoll, 0.06)
+    const stick = tiltToStick(input.gyroBeta - prefs.gyroZeroBeta, input.gyroGamma - prefs.gyroZeroGamma)
+    let gyPitch = clamp(stick.back / maxTilt, -1, 1) * sens * input.gyroBlend
+    let gyRoll = clamp(stick.right / maxTilt, -1, 1) * sens * input.gyroBlend
+    gyPitch = applyDeadzone(gyPitch, 0.1)
+    gyRoll = applyDeadzone(gyRoll, 0.1)
     stickPitch += gyPitch
     stickRoll += gyRoll
   }
@@ -213,6 +212,35 @@ export async function requestGyroPermission(): Promise<'ok' | 'denied' | 'unsupp
 export type GyroBind = {
   stop: () => void
   tryAbsoluteFallback: () => void
+}
+
+/**
+ * Device beta/gamma are in the phone's portrait frame.
+ * +beta = top of the phone toward the ground. +gamma = right edge down.
+ * Return stick axes for the SCREEN: +back = top of the screen up, +right = right edge down.
+ */
+export function tiltToStick(beta: number, gamma: number): { back: number; right: number } {
+  let angle = 0
+  if (typeof screen !== 'undefined' && screen.orientation && typeof screen.orientation.angle === 'number') {
+    angle = screen.orientation.angle
+  } else if (typeof window !== 'undefined' && typeof (window as Window & { orientation?: number }).orientation === 'number') {
+    const o = (window as Window & { orientation?: number }).orientation ?? 0
+    angle = ((-o % 360) + 360) % 360
+  }
+  const a = ((angle % 360) + 360) % 360
+  let screenBeta = beta
+  let screenGamma = gamma
+  if (a === 90) {
+    screenBeta = -gamma
+    screenGamma = beta
+  } else if (a === 270) {
+    screenBeta = gamma
+    screenGamma = -beta
+  } else if (a === 180) {
+    screenBeta = -beta
+    screenGamma = -gamma
+  }
+  return { back: -screenBeta, right: screenGamma }
 }
 
 function applyOrient(input: InputState, beta: number | null, gamma: number | null): void {
