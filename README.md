@@ -1,4 +1,4 @@
-# Osprey Flight v9
+# Osprey Flight v10
 
 Phone/tablet flight sim — **Osprey** + **F-35**. Flight / controls / physics.
 
@@ -10,17 +10,20 @@ Do **not** overwrite `osprey-best.zip` — Dude flips best.
 
 ---
 
-## What Kyle hit (v8) → what v9 changed
+## What Kyle hit (v9) → what v10 changed
 
 | You said | This build |
 |----------|------------|
-| Past ~1000 ft the world **empties** | Fields, trees, ridges, clouds follow you up. Horizon scales with altitude |
-| Sound goes **static** up high | Audio levels clamped so it doesn’t clip into noise. Osprey still slaps, F-35 still roars |
-| Camera from **under/behind** looks wrong | Chase stays **above and behind**. No belly view |
-| F-35 **jumps** on the runway | Jet ground pin. No Osprey bounce spring. Rolls, then rotate to lift |
-| **Hangar** next to Pause — easy mis-tap | Hangar off the flight bar. It’s in **Settings** (asks first). Crash screen still has Hangar |
+| Full throttle stuck around **52 kt** — couldn’t rotate | Roll push is stronger. Full throttle gets you **past rotate** (~74 kt and beyond) |
+| Casual stick-up fought the rotate | Stick-up = **nose up** and helps you rotate |
+| Still felt **airborne** on the deck | Wings stay pinned. Pitch only when you’re fast and you ask for it |
+| Audio still **staticy** | Modulation grit cut. Osprey slaps, F-35 roars |
+| Camera **shakes** after ~200 ft | Chase dampened. No altitude wobble |
+| Gear could come **up on the ground** | Gear stays **DOWN** until you’re airborne |
+| Start a real emergency panel | **EMER** on the deck: gear down, flaps full, throttle cut, mode to airplane |
+| FL chip looked like a fault | It’s **flight level** (altitude in hundreds of feet). Shows when you’re high. Not a bug |
 
-v3–v8 still locked: Settings pauses until Resume · mute · Cal frozen · 5s tilt · LEVEL · yaw bar left · deck · cold start · runway stays painted · convert tether.
+v3–v9 still locked: Settings pauses until Resume · Hangar only in Settings · cold start · runway · far scenery · tilt · yaw bar left.
 
 ---
 

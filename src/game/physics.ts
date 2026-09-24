@@ -22,6 +22,8 @@ import {
   F35_CONV_BRIDGE,
   F35_CONV_WING_SPEED,
   F35_DRAG_H,
+  F35_WOW_DRAG_SCALE,
+  F35_WOW_GEAR_DRAG,
   F35_CTOL_ROTATE_SPEED,
   F35_CTOL_ROTATE_PITCH,
   F35_CTOL_ROTATE_THR,
@@ -377,7 +379,8 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const eng = c.engineL * (c.electricsOn ? 1 : 0.2) * (0.45 + 0.55 * c.fuel)
   const powerAvail = clamp(eng * (c.failAsymmetric ? 0.7 : 1), 0, 1)
 
-  const wantRpm = 0.1 + ctrl.tcl * (0.5 + vlFrac * 0.45) * powerAvail
+  // v10: CTOL spool higher so takeoff-roll thrust clears rotate speed
+  const wantRpm = 0.1 + ctrl.tcl * (0.75 + vlFrac * 0.2) * powerAvail
   c.rotorRpm += (wantRpm - c.rotorRpm) * (1 - Math.exp(-4 * dt))
 
   if (ctrl.tcl > 0.05 && c.fuel > 0) {
@@ -413,13 +416,16 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     else if (experience !== 'casual') envelopeWarn = 'VL — lift fan + nozzle'
   } else if (mode === 'CTOL' && wowCtol) {
     if (ctrl.tcl < 0.08) envelopeWarn = 'CTOL cold — throttle up to taxi / roll'
-    else if (speedKt < 55) envelopeWarn = 'CTOL roll — accelerate, rotate to lift'
+    else if (speedKt < 70) envelopeWarn = 'CTOL roll — accelerate, stick-up to rotate'
   } else if (mode === 'CTOL' && speedKt < 75 && agl > 5 && ctrl.tcl < 0.45) {
     envelopeWarn = 'CTOL — keep speed / AoA'
   }
 
   // Attitude — nosewheel / rudder on ground handled after forces
-  const pitchCmd = ctrl.cyclicPitch * F35_PITCH_RATE
+  // v10: F-35 inverts cyclic→attitude vs Osprey so Casual stick-up (cyclicPitch=-1)
+  // raises +pitch (rotate gate + AoA). Realistic stick-up still noses down.
+  const noseUpCmd = -ctrl.cyclicPitch
+  const pitchCmd = noseUpCmd * F35_PITCH_RATE
   let rollCmd = ctrl.cyclicRoll * F35_ROLL_RATE
   let yawCmd = ctrl.yaw * F35_YAW_RATE * (mode === 'CTOL' ? clamp(speedHoriz / 50, 0.2, 1) : 1)
   if (c.failAsymmetric) rollCmd += 0.2
@@ -432,10 +438,17 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     c.roll += rollCmd * dt
     c.yaw = wrapAngle(c.yaw + yawCmd * dt)
   } else {
-    // On deck CTOL: allow rotate (pitch up) for takeoff; keep wings level; steer with yaw/cyclic
-    c.pitch += pitchCmd * dt
-    c.roll *= Math.exp(-5 * dt)
-    c.roll += rollCmd * 0.15 * dt
+    // v10 WOW: pin bank (deck feel); pitch authority only near rotate speed + stick
+    const rotateAuth = clamp(
+      (speedHoriz - F35_CTOL_ROTATE_SPEED * 0.5) / (F35_CTOL_ROTATE_SPEED * 0.5),
+      0,
+      1,
+    )
+    const stickNoseUp = noseUpCmd >= 0.04
+    const pitchAuth = stickNoseUp ? 0.12 + 0.88 * rotateAuth : 0.08 * rotateAuth
+    c.pitch += pitchCmd * dt * pitchAuth
+    c.roll *= Math.exp(-10 * dt) // hard pin wings level on deck
+    // no airborne rollCmd float while WOW — nosewheel/yaw steers
   }
 
   const pitchLim = mode === 'STOVL' ? 0.62 : mode === 'VL' ? 0.5 : wowCtol ? 0.42 : 0.58
@@ -444,8 +457,10 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
   const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
   if (!stickPitchLive && !wowCtol) c.pitch *= Math.exp(-0.2 * dt)
-  if (!stickRollLive) c.roll *= Math.exp(-0.26 * dt)
-  if (wowCtol && !stickPitchLive) c.pitch *= Math.exp(-1.8 * dt) // settle on nosewheel
+  if (!stickRollLive && !wowCtol) c.roll *= Math.exp(-0.26 * dt)
+  // Settle nosewheel only when stick dead — never cancel held Casual nose-up
+  if (wowCtol && !stickPitchLive) c.pitch *= Math.exp(-2.2 * dt)
+  if (wowCtol) c.roll *= Math.exp(-6 * dt)
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -468,7 +483,8 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   let nz = (1 - nozzleDown) * fzB + nozzleDown * uz
 
   const tipBlend = wowCtol ? 0 : mode === 'CTOL' ? 0.12 : 0.4
-  const tip = clamp(ctrl.cyclicPitch, -1, 1) * tipBlend
+  // Align tip with nose-up cmd (Casual stick-up tips with attitude)
+  const tip = clamp(noseUpCmd, -1, 1) * tipBlend
   nx += tip * fxB
   ny += tip * fyB
   nz += tip * fzB
@@ -498,8 +514,8 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   if (wowCtol) {
     const upThrust = Math.max(0, ny * mainThrust + uy * fanThrust * (1 + ge))
     fy -= upThrust
-    // Throttle → forward accel along body (taxi / takeoff roll)
-    const rollPush = F35_MASS * (7.5 + ctrl.tcl * 14) * ctrl.tcl * powerAvail
+    // v10: stronger takeoff-roll push — clear ≥80–90 kt at full THR
+    const rollPush = F35_MASS * (9.5 + ctrl.tcl * 17) * ctrl.tcl * powerAvail
     fx += fxB * rollPush
     fz += fzB * rollPush
     // Parking brake holds until throttle breaks it
@@ -552,20 +568,22 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     const bridgeNeed = tilted * (1 - wingReady) * F35_CONV_BRIDGE
     fy += F35_MASS * GRAVITY * ctrl.tcl * powerAvail * bridgeNeed
     if (bridgeNeed > 0.05 && ctrl.tcl > 0.4) {
-      const stoPush = F35_MASS * (3.2 + ctrl.cyclicPitch * 4) * bridgeNeed * ctrl.tcl
+      const stoPush = F35_MASS * (3.2 + noseUpCmd * 4) * bridgeNeed * ctrl.tcl
       fx += fxB * stoPush
       fz += fzB * stoPush
     }
   }
 
-  const dragScale = (0.25 + vlFrac * 0.12) * (0.3 + airspeed * 0.0055)
+  const dragScale =
+    (0.25 + vlFrac * 0.12) * (0.3 + airspeed * 0.0055) * (wowCtol ? F35_WOW_DRAG_SCALE : 1)
   fx -= c.vx * F35_DRAG_H * F35_MASS * dragScale
   fz -= c.vz * F35_DRAG_H * F35_MASS * dragScale
   fy -= c.vy * 1.2 * F35_MASS * 0.08
 
   if (c.gearDown && mode === 'CTOL') {
-    fx -= c.vx * 0.1 * F35_MASS
-    fz -= c.vz * 0.1 * F35_MASS
+    const gearDrag = wowCtol ? F35_WOW_GEAR_DRAG : 0.1
+    fx -= c.vx * gearDrag * F35_MASS
+    fz -= c.vz * gearDrag * F35_MASS
   }
 
   const ax = clamp(fx / F35_MASS, -100, 100)
@@ -593,9 +611,11 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
     if (Math.abs(c.vy) < 0.35) c.vy = 0
     c.onGround = true
 
-    // Stronger friction settle at taxi speeds (no micro-jump on uneven math)
+    // v10: full-THR rolling friction low enough to clear rotate (~70–90 kt)
     const slow = clamp(1 - speedHoriz / 12, 0, 1)
-    const rollMu = c.parkingBrake ? 16 : lerp(7.5 + slow * 4, 1.0, clamp(ctrl.tcl, 0, 1))
+    const rollMu = c.parkingBrake
+      ? 16
+      : lerp(6.2 + slow * 3.5, 0.58, clamp(ctrl.tcl, 0, 1))
     c.vx *= Math.exp(-rollMu * dt)
     c.vz *= Math.exp(-rollMu * dt)
     if (speedHoriz < 0.35 && ctrl.tcl < 0.08) {
@@ -660,8 +680,28 @@ export function stepCraft(
   experience: Experience,
 ): string {
   const dtClamped = clamp(dt, 0, 0.05)
-  if (c.kind === 'f35') return stepF35(c, ctrl, dtClamped, experience)
-  return stepOsprey(c, ctrl, dtClamped, experience)
+  const warn =
+    c.kind === 'f35' ? stepF35(c, ctrl, dtClamped, experience) : stepOsprey(c, ctrl, dtClamped, experience)
+  // v10: never allow gear UP while weight-on-wheels
+  if (c.onGround) c.gearDown = true
+  return warn
+}
+
+
+/** Refuse gear UP while weight-on-wheels / firmly on deck. Extend always OK. */
+export function trySetGearDown(c: Craft, wantDown: boolean): boolean {
+  if (wantDown) {
+    c.gearDown = true
+    return true
+  }
+  const gearH = c.kind === 'f35' ? F35_GEAR_H : GEAR_H
+  const agl = Math.max(0, c.y - gearH)
+  if (c.onGround || agl < 1.2) {
+    c.gearDown = true
+    return false
+  }
+  c.gearDown = false
+  return true
 }
 
 export function hardLanding(c: Craft): boolean {

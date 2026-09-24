@@ -215,7 +215,7 @@ export class FlightAudio {
       this.screamFilter.frequency.value = 800
       this.lfo.type = 'square'
       this.lfo.frequency.value = 5.2
-      this.lfoGain.gain.value = 0.022
+      this.lfoGain.gain.value = 0 // v10: no square LFO grit
     } else {
       if (!this.routedF35) this.routeF35()
       // Fighter jet: chest-rumble roar, restrained scream (not toy/model-plane whine)
@@ -233,10 +233,10 @@ export class FlightAudio {
       this.roarGain.gain.value = 0.62
       this.screamGain.gain.value = 0.1
       this.abGain.gain.value = 0
-      this.noiseGain.gain.value = 0.12
+      this.noiseGain.gain.value = 0.04 // v10: quieter grit
       this.abNoiseGain.gain.value = 0
       this.filter.type = 'lowpass'
-      this.filter.frequency.value = 900
+      this.filter.frequency.value = 520
       this.filter.Q.value = 0.45
       this.roarFilter.type = 'lowpass'
       this.roarFilter.frequency.value = 130
@@ -246,7 +246,7 @@ export class FlightAudio {
       this.screamFilter.Q.value = 0.7
       this.lfo.type = 'sine'
       this.lfo.frequency.value = 0.35
-      this.lfoGain.gain.value = 0.003
+      this.lfoGain.gain.value = 0 // v10: kill modulation grit
     }
   }
 
@@ -328,11 +328,11 @@ export class FlightAudio {
     const soft = rpmSafe > 1.05 || tclSafe > 1.05 // soften when values go extreme
 
     const setHz = (param: AudioParam, hz: number, tau = 0.08) => {
-      const v = clamp(Number.isFinite(hz) ? hz : 60, 20, 12000)
+      const v = clamp(Number.isFinite(hz) ? hz : 60, 20, 4000)
       param.setTargetAtTime(v, t, tau)
     }
     const setG = (param: AudioParam, g: number, tau = 0.1) => {
-      const v = clamp(Number.isFinite(g) ? g : 0, 0, 0.95)
+      const v = clamp(Number.isFinite(g) ? g : 0, 0, 0.75)
       param.setTargetAtTime(v, t, tau)
     }
     const setQ = (param: AudioParam, q: number, tau = 0.1) => {
@@ -353,17 +353,13 @@ export class FlightAudio {
       setG(this.abGain.gain, 0)
       setG(this.noiseGain.gain, 0)
       setG(this.abNoiseGain.gain, 0)
-      setHz(this.filter.frequency, clamp(190 + rpmSafe * 105 + (1 - hel) * 48, 80, 900), 0.1)
-      // Master vol capped so LFO cannot drive into clipping/static
-      const vol = Math.min(soft ? 0.08 : 0.095, 0.02 + rpmSafe * 0.05 + tclSafe * 0.022)
+      setHz(this.filter.frequency, clamp(190 + rpmSafe * 105 + (1 - hel) * 48, 80, 720), 0.1)
+      // v10: lower master; LFO depth forced 0 (was high-alt static grit)
+      const vol = Math.min(soft ? 0.07 : 0.085, 0.018 + rpmSafe * 0.045 + tclSafe * 0.02)
       setG(this.gain.gain, vol, 0.08)
-      if (this.lfoGain) {
-        // Keep LFO depth << master so sum stays well under 1 (no static-ish clip)
-        const lfo = soft ? 0.006 : clamp(0.01 + rpmSafe * 0.01 + tclSafe * 0.003, 0, 0.018)
-        setG(this.lfoGain.gain, Math.min(lfo, vol * 0.22), 0.1)
-      }
+      if (this.lfoGain) setG(this.lfoGain.gain, 0, 0.05)
     } else {
-      // F-35 jet roar — distinct from Osprey slap; v9 clamps prevent altitude static
+      // F-35 jet roar — v10: kill LFO + cut noise/scream grit (no high-alt static)
       const vl = clamp01(blendSafe)
       const ctol = 1 - vl
       const stovl = vl > 0.15 && vl < 0.85 ? 1 : 0
@@ -371,35 +367,32 @@ export class FlightAudio {
       const roarHz = 58 + rpmSafe * 42 + ctol * 28 + tclSafe * 22
       setHz(this.oscD.frequency, clamp(roarHz, 52, 145))
       setHz(this.oscE.frequency, clamp(roarHz * 1.38, 70, 190))
-      setHz(this.roarFilter.frequency, clamp(95 + ctol * 55 + rpmSafe * 30 + tclSafe * 20, 60, 400), 0.1)
-      setG(this.roarGain.gain, clamp(0.38 + ctol * 0.28 + tclSafe * 0.18 + stovl * 0.05, 0, 0.85))
+      setHz(this.roarFilter.frequency, clamp(95 + ctol * 55 + rpmSafe * 30 + tclSafe * 20, 60, 320), 0.1)
+      setG(this.roarGain.gain, clamp(0.36 + ctol * 0.24 + tclSafe * 0.15 + stovl * 0.04, 0, 0.72))
 
-      const scream = 160 + rpmSafe * 90 + ctol * 70 + tclSafe * 40
-      setHz(this.oscA.frequency, clamp(scream, 140, 420), 0.07)
-      setHz(this.oscB.frequency, clamp(scream * 1.45, 180, 520), 0.07)
-      setHz(this.screamFilter.frequency, clamp(480 + ctol * 220 + rpmSafe * 120, 200, 1800), 0.1)
-      setQ(this.screamFilter.Q, 0.55 + ctol * 0.25)
-      setG(this.screamGain.gain, 0.05 + ctol * 0.09 + tclSafe * 0.06)
+      const scream = 160 + rpmSafe * 80 + ctol * 55 + tclSafe * 30
+      setHz(this.oscA.frequency, clamp(scream, 140, 360), 0.08)
+      setHz(this.oscB.frequency, clamp(scream * 1.4, 180, 440), 0.08)
+      setHz(this.screamFilter.frequency, clamp(420 + ctol * 160 + rpmSafe * 80, 200, 1100), 0.1)
+      setQ(this.screamFilter.Q, 0.45 + ctol * 0.15)
+      setG(this.screamGain.gain, 0.03 + ctol * 0.05 + tclSafe * 0.035)
 
       setHz(this.oscC.frequency, 48 + rpmSafe * 55 + vl * 30)
       setG(this.thumpGain.gain, vl * (0.1 + rpmSafe * 0.08), 0.12)
 
       const ab = clamp01((tclSafe - 0.58) / 0.42) * clamp01((0.32 - vl) / 0.32)
-      setHz(this.noiseFilter.frequency, clamp(110 + ctol * 60 + ab * 90, 60, 800), 0.1)
-      setG(this.noiseGain.gain, 0.07 + ctol * 0.09 + ab * 0.1 + tclSafe * 0.035)
-      setHz(this.abFilter.frequency, clamp(200 + ab * 180 + ctol * 80, 80, 1200), 0.1)
-      setG(this.abNoiseGain.gain, ab * (0.05 + tclSafe * 0.04), 0.12)
-      setG(this.abGain.gain, ab * 0.07, 0.12)
+      setHz(this.noiseFilter.frequency, clamp(90 + ctol * 40 + ab * 50, 60, 280), 0.12)
+      setG(this.noiseGain.gain, 0.02 + ctol * 0.03 + ab * 0.035 + tclSafe * 0.012)
+      setHz(this.abFilter.frequency, clamp(160 + ab * 100 + ctol * 50, 80, 480), 0.12)
+      setG(this.abNoiseGain.gain, ab * (0.02 + tclSafe * 0.015), 0.12)
+      setG(this.abGain.gain, ab * 0.03, 0.12)
 
-      setHz(this.filter.frequency, clamp(480 + rpmSafe * 280 + ctol * 320, 200, 2400), 0.09)
-      setQ(this.filter.Q, 0.4 + ctol * 0.25)
+      setHz(this.filter.frequency, clamp(320 + rpmSafe * 160 + ctol * 180, 180, 1100), 0.1)
+      setQ(this.filter.Q, 0.35 + ctol * 0.15)
 
-      const vol = Math.min(soft ? 0.1 : 0.12, 0.03 + rpmSafe * 0.035 + tclSafe * 0.04 + ctol * 0.02)
+      const vol = Math.min(soft ? 0.08 : 0.1, 0.025 + rpmSafe * 0.03 + tclSafe * 0.032 + ctol * 0.015)
       setG(this.gain.gain, vol, 0.09)
-      if (this.lfoGain) {
-        const lfo = soft ? 0.001 : clamp(0.0012 + ab * 0.004, 0, 0.006)
-        setG(this.lfoGain.gain, Math.min(lfo, vol * 0.15), 0.15)
-      }
+      if (this.lfoGain) setG(this.lfoGain.gain, 0, 0.05)
     }
   }
 

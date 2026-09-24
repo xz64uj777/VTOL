@@ -33,8 +33,9 @@ export function resetCamOffsets(cam: Cam): void {
 
 /**
  * Chase → Wing → Tower → Pad → Orbit.
- * v9: chase stays above+behind (clamp y / pitch); altitude damps attitude coupling; less jitter.
- * v7: touch yaw/pitch offsets; wing + tower modes; heavier chase damp / less micro-lead.
+ * v10: remove altitude-linked height/shake; no micro-snap oscillation; heavier damp; no chase lead.
+ * v9: chase stays above+behind (clamp y / pitch).
+ * v7: touch yaw/pitch offsets; wing + tower modes.
  * v6: craft-in-view snap + kill velocity lead on convert/decel + hard tether.
  */
 export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number): void {
@@ -50,9 +51,8 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   if (!Number.isFinite(cam.pitchOff)) cam.pitchOff = 0
 
   const speed = Math.hypot(craft.vx, craft.vz)
-  const agl = Math.max(0, craft.y)
-  // At altitude, damp pitch/roll coupling so chase never flips under when craft pitches
-  const altDamp = clamp(1 - agl / 400, 0.35, 1)
+  // v10: stable look soften — no altitude-ramping that jitters past ~200 ft
+  const altDamp = 0.85
   let tx = craft.x
   let ty = craft.y + 2.8
   let tz = craft.z
@@ -66,8 +66,8 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
 
   if (mode === 'chase') {
     const back = 20 + clamp(speed * 0.4, 0, 16)
-    // Height grows with speed AND altitude — always above craft
-    const height = 6.5 + clamp(speed * 0.09, 0, 5) + clamp(agl * 0.012, 0, 8)
+    // v10: height from speed only — no agl term (was camera "shake" past ~200 ft)
+    const height = 6.5 + clamp(speed * 0.09, 0, 5)
     const lookX = craft.x
     const lookY = craft.y + 1.6
     const lookZ = craft.z
@@ -166,10 +166,7 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
       tx += craft.vx * leadT
       tz += craft.vz * leadT
     } else {
-      // Chase: tiny lead only when accelerating cleanly — v7/v9: less micro-lead
-      const leadT = clamp(speed * 0.015, 0.008, 0.055) * altDamp
-      tx += craft.vx * leadT
-      tz += craft.vz * leadT
+      // v10 chase: no velocity lead (micro-lead caused altitude jitter)
     }
   }
 
@@ -188,14 +185,15 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
   const forwardDot = (toCraftX * lookHx + toCraftZ * lookHz) / horizToCraft
   const craftBehind = forwardDot < 0.15
   const craftTooFar = craftDist > wantDist * 1.35
-  const craftTooClose = craftDist < wantDist * 0.35 && (mode === 'chase' || mode === 'wing')
   const camUnder = cam.y < craft.y + CAM_MIN_ABOVE * 0.5
 
   const err = Math.hypot(tx - cam.x, ty - cam.y, tz - cam.z)
   const frameW = Math.max(wantDist, 14)
   const errFrames = err / frameW
-  const targetMiss = errFrames >= 0.85 || err > frameW * 1.2
-  const snap = targetMiss || craftBehind || craftTooFar || craftTooClose || camUnder
+  // v10: harder snap threshold — avoid micro-snap oscillation at altitude
+  const targetMiss = errFrames >= 1.35 || err > frameW * 1.85
+  const snap = targetMiss || craftBehind || craftTooFar || camUnder
+  // craftTooClose handled by soft lerp, not snap (was jitter source)
 
   if (snap) {
     cam.x = tx
@@ -207,9 +205,9 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
     return
   }
 
-  // v9: slightly heavier chase damp to cut residual jitter
-  let k = mode === 'pad' || mode === 'tower' ? 6 : mode === 'chase' ? 10 : mode === 'wing' ? 10 : 7.5
-  k *= 1 + clamp(errFrames * 0.9, 0, 3)
+  // v10: heavier chase damp, gentler err boost (no oscillation)
+  let k = mode === 'pad' || mode === 'tower' ? 5.5 : mode === 'chase' ? 7.5 : mode === 'wing' ? 8 : 6.5
+  k *= 1 + clamp(errFrames * 0.45, 0, 1.6)
   const a = 1 - Math.exp(-k * dt)
   cam.x = lerp(cam.x, tx, a)
   cam.y = lerp(cam.y, ty, a)
@@ -230,7 +228,7 @@ export function updateCamera(cam: Cam, craft: Craft, mode: CamMode, dt: number):
     craftPitch = clamp(craftPitch, CHASE_PITCH_MIN, CHASE_PITCH_MAX)
   }
   const lookK =
-    mode === 'pad' || mode === 'tower' ? 1 : mode === 'orbit' ? 6.5 : mode === 'wing' ? 10 : 9.5
+    mode === 'pad' || mode === 'tower' ? 1 : mode === 'orbit' ? 5.5 : mode === 'wing' ? 7.5 : 7
   const ka = mode === 'pad' || mode === 'tower' ? 1 : 1 - Math.exp(-lookK * dt)
   cam.yaw += wrapAngle(craftYaw - cam.yaw) * ka
   cam.pitch = lerp(cam.pitch, craftPitch, ka)

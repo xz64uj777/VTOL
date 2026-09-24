@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v9 — tunables. */
+/** Osprey / F-35 Flight v10 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -67,11 +67,16 @@ export const F35_YAW_RATE = 0.7
 export const F35_CONV_WING_SPEED = 52
 export const F35_CONV_BRIDGE = 0.68
 export const F35_DRAG_H = 0.14
+/** WOW CTOL parasite scale (cuts ground-roll speed cap). */
+export const F35_WOW_DRAG_SCALE = 0.42
+/** WOW CTOL gear rolling drag coeff (was 0.1 — capped roll ~52–62 kt). */
+export const F35_WOW_GEAR_DRAG = 0.028
 /**
  * F-35 CTOL ground is jet-specific (hard pin + critical damp) — NOT the Osprey
  * hover plantGear spring. Do not share bounce/WOW logic between birds.
  */
-export const F35_CTOL_ROTATE_SPEED = 38
+/** Rotate gate m/s — ~70 kt (primary fix is roll accel; was 38≈74 kt). */
+export const F35_CTOL_ROTATE_SPEED = 36
 export const F35_CTOL_ROTATE_PITCH = 0.12
 export const F35_CTOL_ROTATE_THR = 0.55
 /** Leave-ground hysteresis: must clear this AGL before WOW can re-latch. */
@@ -97,7 +102,7 @@ export const MASS = OSP_MASS
 export const MAX_THRUST = OSP_MAX_THRUST
 
 /**
- * Quality tiers — v9: farLOD massing + altitude-scaled draw.
+ * Quality tiers — v10: farLOD massing + altitude-scaled draw.
  * Near trees trimmed on med for phone; far patches keep countryside at altitude.
  */
 export const QUALITY = {

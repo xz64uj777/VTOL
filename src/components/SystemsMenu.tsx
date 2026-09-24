@@ -1,4 +1,5 @@
 import type { FlightPrefs, TiltHeartbeat } from '../game/prefs'
+import { trySetGearDown } from '../game/physics'
 import type { Sim, SystemsPanel } from '../game/types'
 
 type Props = {
@@ -25,6 +26,7 @@ const PANELS: { id: SystemsPanel; label: string }[] = [
   { id: 'electrics', label: 'Electrics / APU' },
   { id: 'autopilot', label: 'Autopilot' },
   { id: 'failures', label: 'Failures' },
+  { id: 'emer', label: 'EMER' },
 ]
 
 function tiltLabel(hb: TiltHeartbeat | undefined, on: boolean): string {
@@ -187,12 +189,14 @@ export function SystemsMenu({
               <button
                 type="button"
                 onClick={() => {
-                  c.gearDown = !c.gearDown
+                  const ok = trySetGearDown(c, !c.gearDown)
+                  if (!ok) sim.message = 'Gear locked — get airborne to retract'
                   bump()
                 }}
               >
                 Toggle gear
               </button>
+              <p className="dim">Retract blocked on ground / low AGL. Extend always OK.</p>
               <div className="sys-row">
                 <button
                   type="button"
@@ -265,6 +269,86 @@ export function SystemsMenu({
               </button>
             </div>
           )}
+
+          {p === 'emer' && (
+            <div>
+              <p className="dim">Emergency / checklist — thin v10 start. Phone-friendly.</p>
+              <div className="sys-row">
+                <button
+                  type="button"
+                  className={c.gearDown ? 'active' : 'warn'}
+                  onClick={() => {
+                    trySetGearDown(c, true)
+                    bump()
+                  }}
+                >
+                  Emer gear DOWN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sim.controls.flaps = 1
+                    c.flaps = 1
+                    bump()
+                  }}
+                >
+                  Flaps FULL
+                </button>
+              </div>
+              <div className="sys-row">
+                <button
+                  type="button"
+                  className={c.parkingBrake ? 'active' : ''}
+                  onClick={() => {
+                    c.parkingBrake = !c.parkingBrake
+                    bump()
+                  }}
+                >
+                  PARK {c.parkingBrake ? 'SET' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  className={c.lightsOn ? 'active' : ''}
+                  onClick={() => {
+                    c.lightsOn = !c.lightsOn
+                    bump()
+                  }}
+                >
+                  LIGHTS {c.lightsOn ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="sys-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Force CTOL / APL for emergency runway
+                    if (c.kind === 'f35') {
+                      sim.controls.vector = 0
+                      c.vectorPos = 0
+                    } else {
+                      sim.controls.nacelle = 0
+                      c.nacelleDeg = 0
+                    }
+                    bump()
+                  }}
+                >
+                  Mode → {c.kind === 'f35' ? 'CTOL' : 'APL'}
+                </button>
+                <button
+                  type="button"
+                  className="warn"
+                  onClick={() => {
+                    sim.controls.tcl = 0
+                    bump()
+                  }}
+                >
+                  THR CUT
+                </button>
+              </div>
+              <p className="dim">Checklist: gear DOWN · flaps as needed · PARK after stop · THR CUT if abort.</p>
+            </div>
+          )}
+
           {p === 'failures' && (
             <div>
               <p className="dim">Advanced cues — soft asymmetric / hydraulic.</p>

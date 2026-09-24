@@ -1,29 +1,32 @@
-# Fly sheet — Osprey Flight v9
+# Fly sheet — Osprey Flight v10
 
 Phone/tablet, landscape. Pass/fail by **feel**.
 
 ## What’s new
 
-- World still has something to look at past 1000 ft
-- Sound shouldn’t turn into static up high
-- Camera stays **above and behind** the bird
-- F-35 doesn’t hop on the runway
-- **Hangar** is no longer next to Pause
+- F-35 can actually get fast enough to rotate
+- Casual stick-up raises the nose (helps takeoff)
+- Gear won’t come up while you’re on the ground
+- **EMER** strip on the deck
+- Less cam shake, less audio grit
+- **FL** on the HUD is flight level, not a warning
 
 ## Good feels like
 
-1. **F-35** → Fly. On the numbers. Knobs at **0**. **CTOL**.
-2. Raise **THR**. It **rolls**. It does **not** bounce. Pitch up to lift off.
-3. Climb. Past a thousand feet you still see land / haze / clouds — not a blank void.
-4. Ears: roar stays a roar. No static wash.
-5. Chase view stays looking **down** at the bird, not up at the belly.
-6. Flight bar ends at **Pause**. Hangar is inside **Settings**, and it asks before it dumps you.
+1. **F-35** → Fly. On the numbers. Knobs at **0**. Gear **DOWN**. **CTOL**.
+2. PARK off (or just add power — it breaks the brake). Full **THR**. Speed climbs **past ~74 kt**. It does not hop.
+3. **Stick up** (Casual). Nose comes **up**. You rotate and climb.
+4. On the ground, tap **GEAR**. It stays **DOWN**. In the air, it can come up.
+5. **EMER** row: GEAR DOWN · FLAPS FULL · THR CUT · MODE CTOL.
+6. Climb. Camera shouldn’t shudder. Sound shouldn’t turn to static.
+7. High up, **FL** is a number like 16 at ~1600 ft. That’s normal.
 
 ## Shout if (fail)
 
-- F-35 still hops the second you add power
-- Climb past 1000 ft and the world goes empty
-- Sound turns to static
-- Camera flips under the jet
-- Hangar is still sitting next to Pause
-- Settings doesn’t pause / Close auto-resumes
+- Full power still dies around 50 kt
+- Stick-up pushes the nose **down** on the roll
+- Gear comes up while the wheels are on the runway
+- Camera shakes once you’re a couple hundred feet up
+- Sound goes static
+- Hangar is back next to Pause
+- FL looks like an error light and you can’t tell what it means
