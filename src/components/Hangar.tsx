@@ -180,8 +180,8 @@ export function Hangar({
       <HangarPadCanvas bird={bird} />
       <div className="hangar-panel">
         <div className="hangar-badge">TILTROTOR · STOVL · FLIGHT</div>
-        <h1>Osprey Flight v10</h1>
-        <p className="hangar-sub">Pitch flipped · wheels hold in rotation · no sky wall</p>
+        <h1>Osprey Flight v11</h1>
+        <p className="hangar-sub">CTOL taxi · cold start · runway fix · more terrain</p>
 
         <label className="hangar-label">Aircraft</label>
         <div className="seg">
