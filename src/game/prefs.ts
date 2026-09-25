@@ -22,8 +22,6 @@ export const GYRO_HOLDOVER_MS = 5000
 export const TILT_NO_SIGNAL_HINT =
   "Phone isn't sending motion — Chrome + HTTPS + screen unlocked. Laptops have no gyro; use a phone."
 
-const PREFS_KEY = 'osprey-flight-prefs-v5'
-
 export type FlightPrefs = {
   sens: SensKey
   /**
@@ -62,6 +60,9 @@ export function defaultPrefs(): FlightPrefs {
     experience: 'intermediate',
   }
 }
+
+
+const PREFS_KEY = 'osprey-flight-prefs-v5'
 
 export function loadPrefs(): FlightPrefs {
   const base = defaultPrefs()

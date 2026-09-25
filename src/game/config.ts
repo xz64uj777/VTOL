@@ -1,4 +1,4 @@
-/** Osprey / F-35 Flight v10 — tunables. */
+/** Osprey / F-35 Flight v11 — tunables. */
 
 export const GRAVITY = 9.81
 
@@ -102,7 +102,7 @@ export const MASS = OSP_MASS
 export const MAX_THRUST = OSP_MAX_THRUST
 
 /**
- * Quality tiers — v10: farLOD massing + altitude-scaled draw.
+ * Quality tiers — v11: farLOD massing + altitude-scaled draw.
  * Near trees trimmed on med for phone; far patches keep countryside at altitude.
  */
 export const QUALITY = {
