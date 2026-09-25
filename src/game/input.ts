@@ -48,7 +48,7 @@ export function createInput(): InputState {
 }
 
 export function emptyControls(_bird: BirdKind = 'osprey'): Controls {
-  // Cold start: 0 throttle, flaps 0, rotation/nacelle airplane (CTOL / APL)
+  // Cold start: 0 throttle, flaps 0, vector/nacelle airplane (CTOL / APL)
   return {
     cyclicPitch: 0,
     cyclicRoll: 0,
@@ -76,7 +76,9 @@ export function sampleControls(
   const sens = SENS_SCALE[prefs.sens]
   const casual = prefs.pitchMode !== 'realistic'
   // Roll stays Casual (stick-right = bank right). Pitch is flipped — Kyle: pitch was backwards.
-  const pitchSign = (prefs.invertPitch ? -1 : 1)
+  // Casual stick-up -> cyclicPitch < 0 -> negative craft.pitch = nose UP (AoA sign).
+  // invertPitch toggles on top of Casual/Realistic.
+  const pitchSign = (casual ? -1 : 1) * (prefs.invertPitch ? -1 : 1)
   const rollSign = (casual ? -1 : 1) * (prefs.invertRoll ? -1 : 1)
 
   let stickPitch = applyDeadzone(input.stickY) * sens
