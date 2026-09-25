@@ -9,7 +9,7 @@ Phone/tablet, landscape. Pass/fail by **feel**.
 3. **F-35 low climb energy** — full THR + modest nose-up at low altitude keeps energy (still bleeds if you hang it extreme / high).
 4. BG merge: Casual nose-up AoA sign, ground roll lock, world scenery, cockpit cam, screen-aware tilt.
 
-**Player CLEAR** — best flipped to v11.
+**Hold best on v10 until Player CLEAR.**
 
 ## Good feels like
 

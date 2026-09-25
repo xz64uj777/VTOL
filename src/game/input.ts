@@ -48,7 +48,7 @@ export function createInput(): InputState {
 }
 
 export function emptyControls(_bird: BirdKind = 'osprey'): Controls {
-  // Cold start: 0 throttle, flaps 0, vector/nacelle airplane (CTOL / APL)
+  // Cold start: 0 throttle, flaps 0, rotation/nacelle airplane (CTOL / APL)
   return {
     cyclicPitch: 0,
     cyclicRoll: 0,
@@ -75,9 +75,8 @@ export function sampleControls(
   const k = input.keys
   const sens = SENS_SCALE[prefs.sens]
   const casual = prefs.pitchMode !== 'realistic'
-  // Roll stays Casual (stick-right = bank right). Pitch is flipped — Kyle: pitch was backwards.
-  // Casual stick-up -> cyclicPitch < 0 -> negative craft.pitch = nose UP (AoA sign).
-  // invertPitch toggles on top of Casual/Realistic.
+  // v11: Casual stick-up = nose UP. Roll stays Casual (stick-right = bank right).
+  // Invert pitch in Systems if a phone still feels backwards.
   const pitchSign = (casual ? -1 : 1) * (prefs.invertPitch ? -1 : 1)
   const rollSign = (casual ? -1 : 1) * (prefs.invertRoll ? -1 : 1)
 

@@ -1,3 +1,13 @@
+
+## v11 drop
+
+| You said (crew sheet) | This build |
+|----------|------------|
+| Nose rocks on the runway with no power | Parked: pitch command is zero and the nose is held level until you add speed or power. |
+| Scenery hitch around 3000 / 6000 ft | Hills and clouds fade instead of popping. |
+| F-35 full power, modest nose-up, low altitude stalls | Low-altitude power keeps energy. Extreme nose-up still bleeds. |
+| Casual stick-up | Nose **up**. Invert pitch is still in Settings if a phone feels backwards. |
+
 # Osprey Flight v11
 
 

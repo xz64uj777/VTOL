@@ -181,7 +181,7 @@ export function Hangar({
       <div className="hangar-panel">
         <div className="hangar-badge">TILTROTOR · STOVL · FLIGHT</div>
         <h1>Osprey Flight v11</h1>
-        <p className="hangar-sub">CTOL taxi · cold start · runway fix · more terrain</p>
+        <p className="hangar-sub">v11 · parked nose stays put · casual stick-up climbs</p>
 
         <label className="hangar-label">Aircraft</label>
         <div className="seg">
