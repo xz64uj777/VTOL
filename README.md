@@ -1,76 +1,22 @@
-# Osprey Flight v10
+# Osprey Flight v11
 
-Phone/tablet flight sim — **Osprey** + **F-35**. Flight / controls / physics.
 
-Repo: https://github.com/xz64uj777/VTOL
-
-**Kyle: [FLY-SHEET.md](FLY-SHEET.md)** — five-minute feel check.
-
-Do **not** overwrite `osprey-best.zip` — Dude flips best.
-
----
-
-## What Kyle hit (v9) → what v10 changed
+## v11
 
 | You said | This build |
 |----------|------------|
-| Full throttle stuck around **52 kt** — couldn’t rotate | Roll push is stronger. Full throttle gets you **past rotate** (~74 kt and beyond) |
-| Casual stick-up fought the rotate | Stick-up = **nose up** and helps you rotate |
-| Still felt **airborne** on the deck | Wings stay pinned. Pitch only when you’re fast and you ask for it |
-| Audio still **staticy** | Modulation grit cut. Osprey slaps, F-35 roars |
-| Camera **shakes** after ~200 ft | Chase dampened. No altitude wobble |
-| Gear could come **up on the ground** | Gear stays **DOWN** until you’re airborne |
-| Start a real emergency panel | **EMER** on the deck: gear down, flaps full, throttle cut, mode to airplane |
-| FL chip looked like a fault | It’s **flight level** (altitude in hundreds of feet). Shows when you’re high. Not a bug |
+| Free pitch on runway, no power (both) | Parked/idle: pitchCmd=0 + hard damp; authority ramps with speed/power |
+| Scenery hitch ~3000 / ~6000 ft | World-locked hills/clouds; soft band fades (no hard cull pops) |
+| F-35 full THR ~30° up low alt → stall | Low-AGL induced-drag cut + path thrust keep; still bleeds if extreme |
 
-v3–v9 still locked: Settings pauses until Resume · Hangar only in Settings · cold start · runway · far scenery · tilt · yaw bar left.
-
----
+BG b375f6a merged (AoA sign, ground lock, scenery world-lock, cockpit, tilt). **Player CLEAR** — `osprey-best.zip` flipped to v11.
 
 
-## Live fix after v10 (Kyle, no new zip)
+Phone/tablet flight sim — **Osprey** (V-22-style tiltrotor) + **F-35** (STOVL / CTOL / VL).  
+Vite + React + TypeScript + canvas.
 
-| You said | This patch |
-|----------|------------|
-| Both birds **creep / yaw on the ramp with power at 0** | Parking brake holds. Stopped + no throttle = sit still. Nosewheel only steers once you're rolling |
-| **Roll right, drift left** | Bank now slides toward the low wing. Stick right on the ground turns the nose right |
+**v10:** F-35 CTOL roll clears rotate · Casual stick-up helps rotate · audio grit killed · cam shake fixed · gear locked on deck · EMER panel start. v3–v9 kept.
 
-v10 rotate, gear lock, EMER, and deck rules are unchanged.
+Repo target: https://github.com/xz64uj777/VTOL
 
-
-## Live fix — Osprey climb / cockpit
-
-| You said | This patch |
-|----------|------------|
-| After ~2000 ft the Osprey **stops climbing and sinks** | The wing was pulling **down** when the nose was up. Nose-up now makes lift. It keeps climbing. |
-| Speed number **doesn't drop** when it feels like it should | **SPD** is airspeed now (up/down counts). A climb bleeds it. A dive raises it. |
-| Acceleration is a bit **hot** | Airplane drag is a little higher. F-35 still gets past rotate, just not as violent. |
-| Craft looks thin. Want **in the seat** | Solid fuselage/wings. **Cam** once → **COCKPIT** (glare shield, nose, wings). Drag to look around. |
-
-Ramp plant and bank-matches-drift stay.
-
-
-## Live fix — open world, tilt, runway
-
-| You said | This patch |
-|----------|------------|
-| Both birds still wrong **on the runway** | Wings stay level at zero power. They don't bank or skate in place. |
-| **Tilt** is funny on both | Tilt follows the **screen**. In landscape, tip the top of the phone up = nose up. Tip right = bank right. Hit **Cal** once after turning Tilt on. |
-| Can't get above ~1500 ft. Altitude falls, speed doesn't | Nose-up now lifts **both** birds (the jet was pointing thrust down). |
-| Feels like a **landscape ceiling**. Want open world | Hills stay a fixed height. Clouds sit at fixed heights. The ground does not rise with you. Fly as far as you want — countryside keeps going. |
-
-
-## Live fix — pitch, rotation on the ground, sky wall
-
-| You said | This patch |
-|----------|------------|
-| Loose the second **rotation** leaves regular flight | Wheels stay planted in **any** nacelle / vector until you actually lift off. Wings stay level on the ground. |
-| **Pitch** needs to be inverted. Roll is good | Pitch is flipped. Roll is unchanged. |
-| Glitch / bounce around **6000 ft** | Far hills and clouds were stuck in front of the camera. They sit in the world now. You fly past them. |
-
-## Run
-
-```bash
-npm install
-npm run dev
-```
+**Handoff note:** **v11 Player CLEAR.** `osprey-best.zip` matches v11. GitHub `xz64uj777/VTOL` updated with cleared source.
