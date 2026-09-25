@@ -223,13 +223,16 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   let yawCmd = ctrl.yaw * yawRate
   if (helFrac > 0.4) yawCmd += ctrl.tcl * 0.06 * ctrl.cyclicRoll * helFrac
   else yawCmd *= clamp(speedHoriz / 40, 0.15, 1)
-  // Airplane on the ramp: wings stay level, no pedal-spin, no skate with the brake set.
-  const deckAirplane = c.onGround && helFrac < 0.35 && speedHoriz < 1.5 && ctrl.tcl < 0.1
-  if (deckAirplane) yawCmd = 0
-  if (c.onGround && helFrac < 0.4) {
+  // On the wheels in ANY nacelle angle — not only airplane mode.
+  // Starting rotation used to drop this lock and the bird went loose.
+  const deckAirplane = c.onGround && speedHoriz < 1.5 && ctrl.tcl < 0.1
+  if (deckAirplane && helFrac < 0.75) yawCmd = 0
+  if (c.onGround) {
     rollCmd = 0
-    const pitchAuth = clamp((speedHoriz - 14) / 22, 0, 1)
-    pitchCmd *= 0.1 + 0.9 * pitchAuth
+    if (helFrac < 0.65) {
+      const pitchAuth = clamp((speedHoriz - 14) / 22, 0, 1)
+      pitchCmd *= 0.08 + 0.92 * pitchAuth
+    }
   }
   if (c.failAsymmetric) rollCmd += 0.25
 
@@ -246,7 +249,7 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const stickPitchLive = Math.abs(ctrl.cyclicPitch) >= 0.04
   const stickRollLive = Math.abs(ctrl.cyclicRoll) >= 0.04
   if (!stickPitchLive) c.pitch *= Math.exp(-0.22 * dt)
-  if (!stickRollLive || (c.onGround && helFrac < 0.4)) c.roll *= Math.exp(-6 * dt)
+  if (!stickRollLive || c.onGround) c.roll *= Math.exp(-6 * dt)
 
   const cy = Math.cos(c.yaw)
   const sy = Math.sin(c.yaw)
@@ -366,8 +369,8 @@ function stepOsprey(c: Craft, ctrl: Controls, dt: number, experience: Experience
   const plantThr = mode === 'HEL' ? 0.55 : 0.25
   plantGear(c, contactH, ctrl, plantThr, dt)
 
-  // Wheels, not a hover: parking brake holds, and airplane-mode lateral skate is killed.
-  if (c.onGround && helFrac < 0.45) {
+  // Wheels in any nacelle position until the gear actually unloads.
+  if (c.onGround) {
     if (c.parkingBrake && ctrl.tcl < 0.12) {
       c.vx = 0
       c.vz = 0
@@ -460,7 +463,8 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
 
   if (!wowCtol) {
     c.pitch += pitchCmd * dt
-    c.roll += rollCmd * dt
+    if (c.onGround) c.roll *= Math.exp(-8 * dt)
+    else c.roll += rollCmd * dt
     c.yaw = wrapAngle(c.yaw + yawCmd * dt)
   } else {
     // v10 WOW: pin bank (deck feel); pitch authority only near rotate speed + stick
@@ -528,7 +532,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const wingReadyEarly = clamp(airspeedEarly / F35_CONV_WING_SPEED, 0, 1)
   const fanFrac = clamp((vlFrac - 0.08) / 0.75, 0, 1)
   let fanKeep = Math.max(fanFrac, (1 - wingReadyEarly) * clamp(vlFrac / 0.35, 0, 1) * 0.55)
-  if (wowCtol) fanKeep = 0
+  if (wowCtol || (c.onGround && vlFrac < 0.72)) fanKeep = 0
   const fanThrust = F35_LIFT_FAN * ctrl.tcl * fanKeep * powerAvail * (0.65 + 0.35 * c.rotorRpm)
   const ge = wowCtol ? 0 : 0.18 * Math.exp(-agl / 8) * fanKeep * (c.onGround ? 0.3 : 1)
 
@@ -589,6 +593,7 @@ function stepF35(c: Craft, ctrl: Controls, dt: number, experience: Experience): 
   const tilted = clamp((0.95 - vlFrac) / 0.85, 0, 1)
   const inConvert =
     !wowCtol &&
+    !(c.onGround && vlFrac < 0.72) &&
     (mode === 'STOVL' || (mode === 'CTOL' && vlFrac > 0.05) || (mode === 'VL' && vlFrac < 0.95))
   if (inConvert) {
     const bridgeNeed = tilted * (1 - wingReady) * F35_CONV_BRIDGE

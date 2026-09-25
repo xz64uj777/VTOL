@@ -50,3 +50,10 @@ Phone/tablet, landscape. Pass/fail by **feel**.
 2. Tilt ON, then **Cal** while holding the phone the way you fly. Tip the top up — nose up. Tip right — bank right.
 3. Climb past 1500 ft and keep going. The ground should drop away, not rise up to meet you. **SPD** can stay high while you climb; altitude should too.
 4. **Shout if** tilt is still backwards after Cal, or the hills grow up to your altitude.
+
+## Patch — pitch, ground rotation, 6000 ft
+
+1. On the runway, move **NAC** or **VEC** off airplane. It should stay on the wheels, wings level, until it really lifts.
+2. Pitch should feel **opposite** of last time. Roll should feel the same.
+3. Climb past 6000 ft. No white wall, no bounce. The ground stays down.
+4. **Shout if** pitch is still backwards, or it gets loose as soon as you touch rotation.

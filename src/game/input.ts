@@ -75,8 +75,8 @@ export function sampleControls(
   const k = input.keys
   const sens = SENS_SCALE[prefs.sens]
   const casual = prefs.pitchMode !== 'realistic'
-  // Casual: flip both axes so stick-up = nose UP, stick-left = bank LEFT
-  const pitchSign = (casual ? -1 : 1) * (prefs.invertPitch ? -1 : 1)
+  // Roll stays Casual (stick-right = bank right). Pitch is flipped — Kyle: pitch was backwards.
+  const pitchSign = (prefs.invertPitch ? -1 : 1)
   const rollSign = (casual ? -1 : 1) * (prefs.invertRoll ? -1 : 1)
 
   let stickPitch = applyDeadzone(input.stickY) * sens

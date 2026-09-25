@@ -59,6 +59,15 @@ Ramp plant and bank-matches-drift stay.
 | Can't get above ~1500 ft. Altitude falls, speed doesn't | Nose-up now lifts **both** birds (the jet was pointing thrust down). |
 | Feels like a **landscape ceiling**. Want open world | Hills stay a fixed height. Clouds sit at fixed heights. The ground does not rise with you. Fly as far as you want — countryside keeps going. |
 
+
+## Live fix — pitch, rotation on the ground, sky wall
+
+| You said | This patch |
+|----------|------------|
+| Loose the second **rotation** leaves regular flight | Wheels stay planted in **any** nacelle / vector until you actually lift off. Wings stay level on the ground. |
+| **Pitch** needs to be inverted. Roll is good | Pitch is flipped. Roll is unchanged. |
+| Glitch / bounce around **6000 ft** | Far hills and clouds were stuck in front of the camera. They sit in the world now. You fly past them. |
+
 ## Run
 
 ```bash

@@ -509,10 +509,10 @@ export class Renderer {
         const hgt = 40 + hsh * 160
         const half = 180 + hash(gx * 3 + gz) * 280
         const corners = [
-          projectNear({ x: wx - half, y: 0, z: wz - half * 0.35 }, cam, w, h),
-          projectNear({ x: wx + half, y: 0, z: wz - half * 0.35 }, cam, w, h),
-          projectNear({ x: wx + half * 0.55, y: hgt, z: wz + half * 0.2 }, cam, w, h),
-          projectNear({ x: wx - half * 0.55, y: hgt, z: wz + half * 0.2 }, cam, w, h),
+          project({ x: wx - half, y: 0, z: wz - half * 0.35 }, cam, w, h),
+          project({ x: wx + half, y: 0, z: wz - half * 0.35 }, cam, w, h),
+          project({ x: wx + half * 0.55, y: hgt, z: wz + half * 0.2 }, cam, w, h),
+          project({ x: wx - half * 0.55, y: hgt, z: wz + half * 0.2 }, cam, w, h),
         ]
         const ok = corners.filter((p): p is Vec2 => !!p)
         if (ok.length < 3) continue
@@ -537,8 +537,8 @@ export class Renderer {
           const wx = Math.floor(cam.x / 800) * 800 + Math.cos(ang) * dist
           const wz = Math.floor(cam.z / 800) * 800 + Math.sin(ang) * dist
           const p = project({ x: wx, y: baseY, z: wz }, cam, w, h)
-          if (!p || p.d < 40) continue
-          const s = clamp(260 / p.d, 6, 70)
+          if (!p || p.d < 180) continue
+          const s = clamp(180 / p.d, 4, 36)
           ctx.fillStyle = `rgba(240,245,250,${0.16 + hash(i + baseY) * 0.18})`
           ctx.beginPath()
           ctx.ellipse(p.x, p.y, s * 1.7, s * 0.5, 0, 0, Math.PI * 2)
@@ -619,7 +619,7 @@ export class Renderer {
     }
   }
 
-  /** Far LOD land massing / cloud banks — visible above 1000 ft when near trees cull. */
+  /** World-locked far land. Not glued to the camera — you can fly past it. */
   private farMassing(
     ctx: CanvasRenderingContext2D,
     cam: Cam,
@@ -629,53 +629,58 @@ export class Renderer {
     alt: number,
   ) {
     if (alt < 80) return
-    const n = Math.min(farPatches + 4, 28)
-    const reach = SCENERY_FAR_M * (0.45 + clamp(alt / 800, 0, 1) * 0.55)
-    for (let i = 0; i < n; i++) {
-      const ang = cam.yaw + (hash(i + 3.3) - 0.5) * 2.4
-      const dist = 350 + hash(i + 4.4) * reach
-      const wx = cam.x + Math.sin(ang) * dist
-      const wz = cam.z + Math.cos(ang) * dist
-      const elev = 12 + hash(i + 5) * 40
-      const half = 80 + hash(i + 6) * 140 + alt * 0.12
-      const corners = [
-        projectNear({ x: wx - half, y: elev * 0.15, z: wz - half * 0.6 }, cam, w, h),
-        projectNear({ x: wx + half, y: elev * 0.15, z: wz - half * 0.6 }, cam, w, h),
-        projectNear({ x: wx + half * 0.8, y: elev, z: wz + half * 0.5 }, cam, w, h),
-        projectNear({ x: wx - half * 0.8, y: elev, z: wz + half * 0.5 }, cam, w, h),
-      ]
-      const ok = corners.filter((p): p is Vec2 => !!p)
-      if (ok.length < 3) continue
-      ctx.beginPath()
-      ctx.moveTo(ok[0]!.x, ok[0]!.y)
-      for (let k = 1; k < ok.length; k++) ctx.lineTo(ok[k]!.x, ok[k]!.y)
-      ctx.closePath()
-      const a = 0.12 + hash(i) * 0.14
-      ctx.fillStyle = `rgba(${50 + hash(i) * 30 | 0},${65 + hash(i + 1) * 25 | 0},${45 + hash(i + 2) * 20 | 0},${a})`
-      ctx.fill()
-    }
-    // High cloud puffs (cheap) for altitude structure
-    if (alt > 200) {
-      for (let i = 0; i < Math.min(10, 4 + farPatches / 4); i++) {
-        const ang = cam.yaw + (hash(i + 40) - 0.5) * 1.8
-        const dist = 500 + hash(i + 41) * 900
-        const wy = 700 + hash(i + 42) * 500
-        const wx = cam.x + Math.sin(ang) * dist
-        const wz = cam.z + Math.cos(ang) * dist
-        const p = project({ x: wx, y: wy, z: wz }, cam, w, h)
-        if (!p || p.d < 80) continue
-        const s = clamp(220 / p.d, 8, 55)
-        ctx.fillStyle = `rgba(240,245,250,${0.18 + hash(i) * 0.2})`
+    const cell = 900
+    const ox = Math.floor(cam.x / cell)
+    const oz = Math.floor(cam.z / cell)
+    const ring = 3
+    let n = 0
+    const cap = Math.min(farPatches + 4, 28)
+    for (let ix = -ring; ix <= ring && n < cap; ix++) {
+      for (let iz = -ring; iz <= ring && n < cap; iz++) {
+        const gx = ox + ix
+        const gz = oz + iz
+        const hsh = hash(gx * 4.1 + gz * 9.3)
+        if (hsh < 0.62) continue
+        n++
+        const wx = gx * cell + (hash(gx + 1.7) - 0.5) * cell * 0.5
+        const wz = gz * cell + (hash(gz + 2.8) - 0.5) * cell * 0.5
+        const elev = 8 + hsh * 36
+        const half = 70 + hash(gx + gz) * 120
+        const corners = [
+          project({ x: wx - half, y: 0, z: wz - half * 0.5 }, cam, w, h),
+          project({ x: wx + half, y: 0, z: wz - half * 0.5 }, cam, w, h),
+          project({ x: wx + half * 0.7, y: elev, z: wz + half * 0.4 }, cam, w, h),
+          project({ x: wx - half * 0.7, y: elev, z: wz + half * 0.4 }, cam, w, h),
+        ]
+        const ok = corners.filter((p): p is Vec2 => !!p)
+        if (ok.length < 3) continue
         ctx.beginPath()
-        ctx.ellipse(p.x, p.y, s * 1.6, s * 0.55, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.ellipse(p.x + s * 0.5, p.y - s * 0.15, s, s * 0.45, 0, 0, Math.PI * 2)
+        ctx.moveTo(ok[0]!.x, ok[0]!.y)
+        for (const p of ok) ctx.lineTo(p.x, p.y)
+        ctx.closePath()
+        ctx.fillStyle = `rgba(${50 + ((hsh * 30) | 0)},${70 + ((hsh * 20) | 0)},${48},${0.14 + hsh * 0.12})`
         ctx.fill()
       }
     }
+    if (alt > 200) {
+      const bands = [500, 1100, 1800]
+      for (const baseY of bands) {
+        const cxy = Math.floor(cam.x / 1200)
+        const czy = Math.floor(cam.z / 1200)
+        for (let i = 0; i < 5; i++) {
+          const wx = (cxy + (hash(i + baseY) - 0.5) * 4) * 1200
+          const wz = (czy + (hash(i + baseY + 3) - 0.5) * 4) * 1200
+          const p = project({ x: wx, y: baseY, z: wz }, cam, w, h)
+          if (!p || p.d < 200) continue
+          const s = clamp(160 / p.d, 3, 28)
+          ctx.fillStyle = `rgba(240,245,250,${0.12 + hash(i + baseY) * 0.12})`
+          ctx.beginPath()
+          ctx.ellipse(p.x, p.y, s * 1.6, s * 0.45, 0, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
   }
-
 
   private buildings(ctx: CanvasRenderingContext2D, sim: Sim, w: number, h: number, n: number) {
     for (let i = 0; i < n; i++) {
