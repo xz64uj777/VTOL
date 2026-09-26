@@ -39,6 +39,12 @@ type Props = {
   bird: BirdKind
   onHangar: () => void
 }
+function tiltLabel(hb: TiltHeartbeat, on: boolean): string {
+  if (!on) return 'Tilt · OFF'
+  if (hb === 'live') return 'Tilt · live'
+  if (hb === 'no-signal') return 'Tilt · no signal'
+  return 'Tilt · …'
+}
 export function useFlightEngine({ quality, experience, bird, onHangar }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const simRef = useRef(createSim(quality, experience, bird))

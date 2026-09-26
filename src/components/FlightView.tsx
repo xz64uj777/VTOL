@@ -2,7 +2,6 @@ import type { QualityKey } from '../game/config'
 import { cycleCamera, resetCameraView, startFlight } from '../game/sim'
 import type { BirdKind, Experience } from '../game/types'
 import { DeckPanel } from './DeckPanel'
-import { FlightAdvisory } from './FlightAdvisory'
 import { HUD } from './HUD'
 import { SystemsMenu } from './SystemsMenu'
 import { VirtualControls } from './VirtualControls'
@@ -58,11 +57,9 @@ export function FlightView({ quality, experience, bird, onHangar }: Props) {
   } = useFlightEngine({ quality, experience, bird, onHangar })
 
   return (
-    <div className={`flight flight-${bird}`}>
-      <div className="flight-brand" aria-hidden><span>OSPREY FLIGHT</span><small>v12</small></div>
+    <div className="flight">
       <canvas ref={canvasRef} className="flight-canvas" />
       <HUD hud={hud} message={bannerMsg} paused={paused} level={levelReading} />
-      <FlightAdvisory hud={hud} experience={experience} paused={paused} />
 
       <div className="flight-top">
         <button

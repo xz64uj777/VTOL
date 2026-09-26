@@ -175,117 +175,68 @@ export function Hangar({
   onBird,
   onFly,
 }: Props) {
-  const isOsprey = bird === 'osprey'
-  const brief = isOsprey
-    ? {
-        role: 'V-22 style tiltrotor',
-        start: 'Cold APL · nacelles forward · TCL 0%',
-        launch: 'Raise NAC for hover or stay APL for a rolling departure.',
-        mode: 'HEL → CONV → APL',
-      }
-    : {
-        role: 'F-35 style STOVL jet',
-        start: 'Cold CTOL · runway · THR 0%',
-        launch: 'Accelerate through 70–90 kt, then pull for rotation.',
-        mode: 'CTOL → STOVL → VL',
-      }
-
   return (
-    <div className="hangar hangar-v12">
+    <div className="hangar">
       <HangarPadCanvas bird={bird} />
-      <div className="hangar-vignette" />
+      <div className="hangar-panel">
+        <div className="hangar-badge">TILTROTOR · STOVL · FLIGHT</div>
+        <h1>Osprey Flight v11</h1>
+        <p className="hangar-sub">v11 · parked nose stays put · casual stick-up climbs</p>
 
-      <section className="hangar-hero">
-        <div className="hangar-eyebrow">MOBILE FLIGHT LAB · BUILD 12</div>
-        <h1>OSPREY <span>FLIGHT</span></h1>
-        <p>Two aircraft. One phone-first cockpit. No canned takeoff animation — you fly it.</p>
-        <div className="hangar-statusline">
-          <span>GYRO READY</span>
-          <span>TOUCH CONTROLS</span>
-          <span>6 CAMERAS</span>
-        </div>
-      </section>
-
-      <div className="hangar-panel hangar-panel-v12">
-        <div className="aircraft-picker" aria-label="Aircraft">
+        <label className="hangar-label">Aircraft</label>
+        <div className="seg">
           <button
             type="button"
-            className={isOsprey ? 'aircraft-card active' : 'aircraft-card'}
+            className={bird === 'osprey' ? 'active' : ''}
             onClick={() => onBird('osprey')}
           >
-            <span className="aircraft-kicker">TILTROTOR</span>
-            <strong>OSPREY</strong>
-            <small>Hover · convert · cruise</small>
+            Osprey
           </button>
           <button
             type="button"
-            className={!isOsprey ? 'aircraft-card active' : 'aircraft-card'}
+            className={bird === 'f35' ? 'active' : ''}
             onClick={() => onBird('f35')}
           >
-            <span className="aircraft-kicker">STOVL</span>
-            <strong>F-35</strong>
-            <small>CTOL · vector · vertical</small>
+            F-35
           </button>
         </div>
 
-        <div className="launch-brief">
-          <div>
-            <span className="brief-label">AIRFRAME</span>
-            <strong>{brief.role}</strong>
-          </div>
-          <div>
-            <span className="brief-label">START</span>
-            <strong>{brief.start}</strong>
-          </div>
-          <div>
-            <span className="brief-label">MODE PATH</span>
-            <strong>{brief.mode}</strong>
-          </div>
-          <p>{brief.launch}</p>
+        <label className="hangar-label">Experience</label>
+        <div className="seg">
+          {(['casual', 'intermediate', 'advanced'] as Experience[]).map((e) => (
+            <button
+              key={e}
+              type="button"
+              className={experience === e ? 'active' : ''}
+              onClick={() => onExperience(e)}
+            >
+              {e === 'casual' ? 'Casual' : e === 'intermediate' ? 'Intermediate' : 'Advanced'}
+            </button>
+          ))}
         </div>
 
-        <div className="hangar-options">
-          <div className="hangar-option">
-            <label className="hangar-label">Assist</label>
-            <div className="seg compact">
-              {(['casual', 'intermediate', 'advanced'] as Experience[]).map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  className={experience === e ? 'active' : ''}
-                  onClick={() => onExperience(e)}
-                >
-                  {e === 'casual' ? 'Casual' : e === 'intermediate' ? 'Pilot' : 'Raw'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="hangar-option">
-            <label className="hangar-label">Graphics</label>
-            <div className="seg compact">
-              {(['low', 'med', 'high'] as QualityKey[]).map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  className={quality === q ? 'active' : ''}
-                  onClick={() => onQuality(q)}
-                >
-                  {q === 'med' ? 'Balanced' : q}
-                </button>
-              ))}
-            </div>
-          </div>
+        <label className="hangar-label">Quality</label>
+        <div className="seg">
+          {(['low', 'med', 'high'] as QualityKey[]).map((q) => (
+            <button
+              key={q}
+              type="button"
+              className={quality === q ? 'active' : ''}
+              onClick={() => onQuality(q)}
+            >
+              {q}
+            </button>
+          ))}
         </div>
 
-        <button type="button" className="fly-btn fly-btn-v12" onClick={onFly}>
-          <span>START SORTIE</span>
-          <small>{isOsprey ? 'VTOL PAD' : 'RUNWAY 01'} · {experience.toUpperCase()}</small>
+        <button type="button" className="fly-btn" onClick={onFly}>
+          Fly
         </button>
 
-        <p className="hangar-hint hangar-hint-v12">
-          v12 keeps the v11 flight model and adds a rebuilt cockpit layer, live flight director,
-          persistent setup, mobile layout cleanup, and portable build paths for Android packaging.
+        <p className="hangar-hint">
+          {bird === 'osprey'
+            ? 'Osprey: cold APL (nacelles forward) · 0 throttle · raise NAC for HEL'
+            : 'F-35: cold CTOL on runway · 0 throttle · taxi/roll; raise VEC for VL'}
         </p>
       </div>
     </div>
