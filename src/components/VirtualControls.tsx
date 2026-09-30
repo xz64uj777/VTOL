@@ -13,6 +13,9 @@ type Props = {
   initialMode?: number
   /** Bump on Hangar→Fly / Reset so knobs re-sync to cold defaults. */
   syncKey?: number
+  /** v15 rings sit above the cockpit panel. HUD page brings the old sliders back. */
+  rings?: boolean
+  showSliders?: boolean
 }
 
 export function VirtualControls({
@@ -22,6 +25,8 @@ export function VirtualControls({
   initialTcl = 0,
   initialMode = 0,
   syncKey = 0,
+  rings = false,
+  showSliders = true,
 }: Props) {
   const cyclicRef = useRef<HTMLDivElement>(null)
   const yawRef = useRef<HTMLDivElement>(null)
@@ -81,25 +86,27 @@ export function VirtualControls({
 
   useEffect(() => {
     const el = tclRef.current
+    const v = input.touchTcl ?? initialTcl
+    input.touchTcl = v
     if (!el) return
     const knob = el.querySelector('.slider-knob') as HTMLDivElement | null
-    if (knob) knob.style.top = `${(1 - initialTcl) * 100}%`
-    input.touchTcl = initialTcl
-  }, [initialTcl, input, syncKey])
+    if (knob) knob.style.top = `${(1 - v) * 100}%`
+  }, [initialTcl, input, syncKey, showSliders])
 
   useEffect(() => {
     const el = modeRef.current
-    if (!el) return
-    const knob = el.querySelector('.slider-knob') as HTMLDivElement | null
-    if (knob) knob.style.top = `${(1 - initialMode) * 100}%`
+    const v = bird === 'osprey' ? (input.touchNacelle ?? initialMode) : (input.touchVector ?? initialMode)
     if (bird === 'osprey') {
-      input.touchNacelle = initialMode
+      input.touchNacelle = v
       input.touchVector = null
     } else {
-      input.touchVector = initialMode
+      input.touchVector = v
       input.touchNacelle = null
     }
-  }, [initialMode, input, bird, syncKey])
+    if (!el) return
+    const knob = el.querySelector('.slider-knob') as HTMLDivElement | null
+    if (knob) knob.style.top = `${(1 - v) * 100}%`
+  }, [initialMode, input, bird, syncKey, showSliders])
 
   const moveCyclic = (el: HTMLDivElement, cx: number, cy: number) => {
     const r = el.getBoundingClientRect()
@@ -282,8 +289,7 @@ export function VirtualControls({
   )
 
   return (
-    <div className={`virt ${tiltCyclic ? 'virt-tilt' : 'virt-cyclic'}`}>
-      {/* LEFT: yaw (+ cyclic stick when tilt off) */}
+    <div className={`virt ${rings ? 'virt-panel' : ''} ${tiltCyclic ? 'virt-tilt' : 'virt-cyclic'}`}>
       <div className="virt-left">
         {!tiltCyclic && (
           <div
@@ -299,37 +305,41 @@ export function VirtualControls({
             <div className="stick-knob" />
           </div>
         )}
-        {yawBar}
+        {!rings && yawBar}
       </div>
 
-      {/* RIGHT: throttle + rotation (NAC / VEC) */}
       <div className="virt-right virt-sliders">
-        <div
-          ref={tclRef}
-          className="slider tcl-slider"
-          onPointerDown={onTclStart}
-          onPointerMove={onTclMove}
-          onPointerUp={onTclEnd}
-          onPointerCancel={onTclEnd}
-        >
-          <div className="slider-label">{powerLabel}</div>
-          <div className="slider-track" />
-          <div className="slider-knob" />
-        </div>
-        <div
-          ref={modeRef}
-          className={`slider nac-slider ${bird === 'f35' ? 'vec-slider' : ''}`}
-          onPointerDown={onModeStart}
-          onPointerMove={onModeMove}
-          onPointerUp={onModeEnd}
-          onPointerCancel={onModeEnd}
-        >
-          <div className="slider-label">{modeLabel}</div>
-          <div className="slider-hi">{modeHi}</div>
-          <div className="slider-lo">{modeLo}</div>
-          <div className="slider-track" />
-          <div className={`slider-knob ${bird === 'f35' ? 'vec-knob' : 'nac-knob'}`} />
-        </div>
+        {showSliders && (
+          <>
+            <div
+              ref={tclRef}
+              className="slider tcl-slider"
+              onPointerDown={onTclStart}
+              onPointerMove={onTclMove}
+              onPointerUp={onTclEnd}
+              onPointerCancel={onTclEnd}
+            >
+              <div className="slider-label">{powerLabel}</div>
+              <div className="slider-track" />
+              <div className="slider-knob" />
+            </div>
+            <div
+              ref={modeRef}
+              className={`slider nac-slider ${bird === 'f35' ? 'vec-slider' : ''}`}
+              onPointerDown={onModeStart}
+              onPointerMove={onModeMove}
+              onPointerUp={onModeEnd}
+              onPointerCancel={onModeEnd}
+            >
+              <div className="slider-label">{modeLabel}</div>
+              <div className="slider-hi">{modeHi}</div>
+              <div className="slider-lo">{modeLo}</div>
+              <div className="slider-track" />
+              <div className={`slider-knob ${bird === 'f35' ? 'vec-knob' : 'nac-knob'}`} />
+            </div>
+          </>
+        )}
+        {rings && yawBar}
       </div>
     </div>
   )

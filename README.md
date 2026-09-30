@@ -1,3 +1,7 @@
+## v15 cockpit
+
+Metal panel, lever detents, ring sticks. Physics unchanged from v11.
+
 
 ## v11 drop
 

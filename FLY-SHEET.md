@@ -1,27 +1,22 @@
-# Fly sheet — Osprey Flight v11
+# Fly sheet — v15 cockpit panel
 
-Phone/tablet, landscape. Pass/fail by **feel**.
+Phone/tablet, landscape. Flight feel is the same. This is controls and the picture.
 
-## What’s new (v11)
-
-1. **Parked pitch lock (both birds)** — on the runway with no power / walking speed, stick does **not** rock the nose. Pitch authority only as speed/power build toward rotate.
-2. **Scenery hitch** — hills/clouds world-locked; soft cloud-deck fades (no pop ~3000 / ~6000 ft).
-3. **F-35 low climb energy** — full THR + modest nose-up at low altitude keeps energy (still bleeds if you hang it extreme / high).
-4. BG merge: Casual nose-up AoA sign, ground roll lock, world scenery, cockpit cam, screen-aware tilt.
-
-**Hold best on v10 until Player CLEAR.**
+## What's new
+- A metal panel fills the bottom. Drag the levers with your thumb.
+- **Osprey:** TCL, NACELLE (catches at 0 / 15 / 75 / 90), FLAPS (clicks UP · 25 · 50 · 75 · FULL), GEAR, PARK, LIGHTS.
+- **F-35:** THROTTLE, VECTOR (catches at CTOL / STOVL / 75 / VL), FLAPS (UP · HALF · FULL), GEAR, PARK, LIGHTS.
+- Tabs: **FLIGHT · ENGINE · GEAR · HUD**. Or the **Panel** button up top. Each aircraft remembers its page.
+- **HUD** hides the panel and brings the old power sliders back.
+- Stick and yaw are clear rings. Cyclic on the left (hides when Tilt is on). Yaw on the right. Tilt still works.
+- Top left is a small `ft · kt · mode` readout.
 
 ## Good feels like
+1. You can fly a circuit with the panel levers and the two rings. You should not need the HUD page.
+2. Flaps click. Nacelle / vector tug at the mode marks and move freely between them.
+3. Sit at idle: nose stays put. Stick-up still raises the nose once you have speed.
 
-1. Sit on the runway, power at 0. Stick pitch — nose stays planted. Wings level.
-2. Add power, roll. Near rotate, stick-up raises the nose (Casual).
-3. F-35: full THR, ~30° nose-up at low altitude — should climb without dumping to stall.
-4. Climb past 3000 ft and 6000 ft — no scenery hitch/bounce. Ground stays down.
-5. Cam once → COCKPIT. Invert pitch/roll available in Systems if needed.
-
-## Shout if (fail)
-
-- Nose still rocks freely while parked / idle on the runway
-- Scenery pops/hitches around 3k or 6k ft
-- F-35 full THR low climb still bleeds to near-stall at modest nose-up
-- Casual stick-up noses down
+## Shout if
+- A lever is hard to grab or jumps.
+- Text is cut off or too small.
+- The airplane flies differently than last time. It should not.
